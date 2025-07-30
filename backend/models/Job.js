@@ -7,12 +7,12 @@ const jobSchema = new mongoose.Schema(
       required: true,
     },
     role: {
-      type: "String",
+      type: String,
       required: true,
     },
     desc: {
       type: String,
-      required: true,
+      required: true, // required: true because it will either be user-provided or AI-generated
     },
     location: {
       type: String,
@@ -20,6 +20,10 @@ const jobSchema = new mongoose.Schema(
     },
     salary: {
       type: Number,
+      required: true,
+    },
+    skills: {
+      type: [String],
       required: true,
     },
     createdBy: {
@@ -32,5 +36,4 @@ const jobSchema = new mongoose.Schema(
 );
 
 const Job = mongoose.model("Job", jobSchema);
-
 export default Job;
