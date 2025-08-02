@@ -9,21 +9,40 @@ dotenv.config();
 // REGISTER USER
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    // Always set role to 'student' by default, regardless of what was sent
+    const { name, email, password } = req.body;
+    const role = "student"; // Force default role to 'student'
 
+    // Input type validation
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string"
+    ) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid input types. Name, email, and password must be strings"
+      );
+    }
+
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return sendResponse(res, 400, false, "User already exists");
     }
 
+    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Create new user
     const newUser = await User.create({
       name,
       email,
       password: hashedPassword,
-      role,
+      role, // Now validated to be either 'student' or 'recruiter'
     });
 
     const token = jwt.sign(
@@ -45,13 +64,10 @@ export const registerUser = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return sendResponse(
-      res,
-      201,
-      true,
-      "User registered successfully",
-      { user: userWithoutPassword, token }
-    );
+    return sendResponse(res, 201, true, "User registered successfully", {
+      user: userWithoutPassword,
+      token,
+    });
   } catch (err) {
     console.error("Register Error:", err);
     return sendResponse(res, 500, false, "Server Error");
@@ -63,9 +79,31 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Input type validation
+    if (typeof email !== "string" || typeof password !== "string") {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Email and password must be strings"
+      );
+    }
+
+    // Email format validation (reuse the same regex from validation middleware)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Please provide a valid email address"
+      );
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
-      return sendResponse(res, 404, false, "User not found");
+      // Don't reveal that the user doesn't exist for security reasons
+      return sendResponse(res, 401, false, "Invalid credentials");
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -92,20 +130,17 @@ export const loginUser = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Login successful",
-      { user: userWithoutPassword, token }
-    );
+    return sendResponse(res, 200, true, "Login successful", {
+      user: userWithoutPassword,
+      token,
+    });
   } catch (error) {
     console.error("Login Error:", error);
     return sendResponse(res, 500, false, "Server Error");
   }
 };
 
-//Logout User
+// Logout User
 export const logoutUser = (req, res) => {
   try {
     res.clearCookie("token");

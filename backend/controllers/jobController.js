@@ -8,7 +8,7 @@ import Notification from "../models/Notification.js";
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
 
-//Create job
+// Create job
 export const createJob = async (req, res) => {
   try {
     const { isValid, missingFields } = validateFields(
@@ -25,14 +25,25 @@ export const createJob = async (req, res) => {
       );
     }
 
-    const { role, desc, salary } = req.body;
+    const {
+      role,
+      desc,
+      salary,
+      title,
+      location,
+      skills = [],
+      jobType = "internship",
+    } = req.body;
+
+    const validJobTypes = ["internship", "full-time", "part-time", "contract"];
+    if (!validJobTypes.includes(jobType)) {
+      return sendResponse(res, 400, false, "Invalid job type");
+    }
 
     const fieldErrors = validateJobFields({ role, desc, salary });
     if (fieldErrors.length > 0) {
       return sendResponse(res, 400, false, fieldErrors.join(", "));
     }
-
-    const { title, location } = req.body;
 
     const company = await Company.findOne({ createdBy: req.user.id });
 
@@ -51,6 +62,8 @@ export const createJob = async (req, res) => {
       desc,
       location,
       salary,
+      skills,
+      jobType,
       createdBy: req.user.id,
     });
 
@@ -59,18 +72,19 @@ export const createJob = async (req, res) => {
 
     return sendResponse(res, 201, true, "Job created successfully", newJob);
   } catch (error) {
-    console.error("Job Creation Error:", error);
+    console.error("[CreateJob] Error:", error.message);
     return sendResponse(res, 500, false, "Server error");
   }
 };
 
-//Get All Jobs
+// Get All Jobs
 export const getAllJobs = async (req, res) => {
   try {
     const {
       search,
       location,
       role,
+      jobType,
       minSalary,
       maxSalary,
       sortBy,
@@ -89,12 +103,12 @@ export const getAllJobs = async (req, res) => {
       ];
     }
 
-    if (location) {
-      filter.location = location;
-    }
+    if (location) filter.location = location;
+    if (role) filter.role = role;
 
-    if (role) {
-      filter.role = role;
+    const validJobTypes = ["internship", "full-time", "part-time", "contract"];
+    if (jobType && validJobTypes.includes(jobType)) {
+      filter.jobType = jobType;
     }
 
     if (minSalary || maxSalary) {
@@ -112,7 +126,7 @@ export const getAllJobs = async (req, res) => {
 
     const jobs = await Job.find(filter)
       .populate("createdBy", "name email")
-      .sort({ createdAt: -1 })
+      .sort(sortOptions || { createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
@@ -123,33 +137,41 @@ export const getAllJobs = async (req, res) => {
       currentPage: Number(page),
     });
   } catch (error) {
-    console.error("Job Fetch Error:", error);
+    console.error("[GetAllJobs] Error:", error.message);
     return sendResponse(res, 500, false, "Server error");
   }
 };
 
-//Updated a Job
+// Update a Job
 export const updateJob = async (req, res) => {
   try {
     const jobId = req.params.id;
-    const job = await Job.findById(jobId);
 
-    if (!job) {
-      return sendResponse(res, 404, false, "Job not found");
+    if (req.body.jobType) {
+      const validJobTypes = [
+        "internship",
+        "full-time",
+        "part-time",
+        "contract",
+      ];
+      if (!validJobTypes.includes(req.body.jobType)) {
+        return sendResponse(res, 400, false, "Invalid job type");
+      }
     }
 
-    if (job.createdBy.toString() !== req.user.id) {
-      return sendResponse(res, 403, false, "Not authorized to update this job");
-    }
+    const updatedJob = await Job.findOneAndUpdate(
+      { _id: jobId, createdBy: req.user.id },
+      req.body,
+      { new: true, runValidators: true }
+    );
 
-    const updatedJob = await Job.findByIdAndUpdate(jobId, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    if (!updatedJob) {
+      return sendResponse(res, 403, false, "Not authorized or job not found");
+    }
 
     return sendResponse(res, 200, true, "Job updated successfully", updatedJob);
   } catch (error) {
-    console.error("Job Update Error:", error);
+    console.error("[UpdateJob] Error:", error.message);
     return sendResponse(res, 500, false, "Server error");
   }
 };
@@ -158,26 +180,24 @@ export const updateJob = async (req, res) => {
 export const deleteJob = async (req, res) => {
   try {
     const jobId = req.params.id;
-    const job = await Job.findById(jobId);
 
-    if (!job) {
-      return sendResponse(res, 404, false, "Job not found");
+    const deletedJob = await Job.findOneAndDelete({
+      _id: jobId,
+      createdBy: req.user.id,
+    });
+
+    if (!deletedJob) {
+      return sendResponse(res, 403, false, "Not authorized or job not found");
     }
-
-    if (job.createdBy.toString() !== req.user.id) {
-      return sendResponse(res, 403, false, "Not authorized to delete this job");
-    }
-
-    await Job.findByIdAndDelete(jobId);
 
     return sendResponse(res, 200, true, "Job deleted successfully");
   } catch (error) {
-    console.error("Job Deletion Error:", error);
+    console.error("[DeleteJob] Error:", error.message);
     return sendResponse(res, 500, false, "Server error");
   }
 };
 
-//Get Job by ID
+// Get Job by ID
 export const getJobById = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id).populate(
@@ -191,9 +211,8 @@ export const getJobById = async (req, res) => {
 
     return sendResponse(res, 200, true, "Job fetched successfully", job);
   } catch (error) {
-    console.error("Get Job By ID Error:", error);
+    console.error("[GetJobById] Error:", error.message);
 
-    // Handle invalid ObjectId errors
     if (error.name === "CastError") {
       return sendResponse(res, 400, false, "Invalid job ID");
     }
@@ -202,7 +221,7 @@ export const getJobById = async (req, res) => {
   }
 };
 
-//Apply for a Job
+// Apply for a Job
 export const applyToJob = async (req, res) => {
   try {
     if (req.user.role !== "student") {
@@ -210,6 +229,24 @@ export const applyToJob = async (req, res) => {
     }
 
     const { jobId } = req.params;
+
+    // Check if resume file is provided
+    if (!req.file) {
+      return sendResponse(res, 400, false, "Resume file is required");
+    }
+
+    // Validate file type
+    if (![
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ].includes(req.file.mimetype)) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Only PDF or DOCX files are allowed for resume"
+      );
+    }
 
     const job = await Job.findById(jobId).populate("createdBy");
     if (!job) {
@@ -229,41 +266,38 @@ export const applyToJob = async (req, res) => {
         "You have already applied to this job"
       );
     }
-    let resumeUrl = ""; // ✅ Resume upload to Cloudinary (if present)
-    if (req.file) {
-      const streamUpload = () => {
-        return new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            {
-              resource_type: "raw",
-              folder: "placify_resumes",
-            },
-            (error, result) => {
-              if (result) {
-                resolve(result);
-              } else {
-                reject(error);
-              }
-            }
-          );
-          streamifier.createReadStream(req.file.buffer).pipe(stream);
-        });
-      };
 
-      const result = await streamUpload();
-      resumeUrl = result.secure_url;
-    }
+    // Upload resume to Cloudinary
+    const streamUpload = () => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: "raw",
+            folder: "placify_resumes",
+          },
+          (error, result) => {
+            if (result) resolve(result);
+            else reject(error);
+          }
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+    };
+
+    const result = await streamUpload();
+    const resumeUrl = result.secure_url;
 
     const application = await Application.create({
       job: jobId,
       student: req.user.id,
-      resumeUrl, // ✅ save URL if uploaded
+      resumeUrl,
     });
 
     const message = `New application received for ${job.title}`;
 
+    // Create notification for the recruiter
     await Notification.create({
-      user: job.createdBy._id,
+      user: job.createdBy._id,  // Using 'user' to match the Notification model
       message,
     });
 
@@ -275,7 +309,7 @@ export const applyToJob = async (req, res) => {
       application
     );
   } catch (error) {
-    console.error("Job Application Error:", error);
+    console.error("[ApplyToJob] Error:", error.message);
     return sendResponse(res, 500, false, "Server error");
   }
 };

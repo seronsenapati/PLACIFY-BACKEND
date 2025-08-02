@@ -10,19 +10,17 @@ export const bookmarkJob = async (req, res) => {
     }
 
     const { jobId } = req.params;
-
     const job = await Job.findById(jobId);
     if (!job) {
       return sendResponse(res, 404, false, "Job not found");
     }
 
-    const user = await User.findById(req.user.id); // or _id, depending on your token
+    const user = await User.findById(req.user._id);
 
-    if (!user) {
-      return sendResponse(res, 404, false, "User not found");
-    }
-
-    if (user.bookmarkedJobs.includes(jobId)) {
+    const alreadyBookmarked = user.bookmarkedJobs.some((id) =>
+      id.equals(jobId)
+    );
+    if (alreadyBookmarked) {
       return sendResponse(res, 400, false, "Job already bookmarked");
     }
 
@@ -31,7 +29,7 @@ export const bookmarkJob = async (req, res) => {
 
     return sendResponse(res, 200, true, "Job bookmarked successfully");
   } catch (error) {
-    console.error("Error bookmarking job:", error);
+    console.error("❌ Error bookmarking job:", error);
     return sendResponse(res, 500, false, "Internal server error");
   }
 };
@@ -64,7 +62,37 @@ export const getBookmarkedJobs = async (req, res) => {
       user.bookmarkedJobs
     );
   } catch (error) {
-    console.error("Error retrieving bookmarked jobs:", error);
+    console.error("❌ Error retrieving bookmarked jobs:", error);
     return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// DELETE /api/bookmarks/:jobId
+export const unbookmarkJob = async (req, res) => {
+  try {
+    if (req.user.role !== "student") {
+      return sendResponse(res, 403, false, "Only students can unbookmark jobs");
+    }
+
+    const { jobId } = req.params;
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return sendResponse(res, 404, false, "Job not found");
+    }
+
+    const user = await User.findById(req.user._id);
+
+    const isBookmarked = user.bookmarkedJobs.some((id) => id.equals(jobId));
+    if (!isBookmarked) {
+      return sendResponse(res, 400, false, "Job is not bookmarked");
+    }
+
+    user.bookmarkedJobs = user.bookmarkedJobs.filter((id) => !id.equals(jobId));
+    await user.save();
+
+    return sendResponse(res, 200, true, "Job unbookmarked successfully");
+  } catch (error) {
+    console.error("❌ Error unbookmarking job:", error);
+    return sendResponse(res, 500, false, "Internal server error");
   }
 };

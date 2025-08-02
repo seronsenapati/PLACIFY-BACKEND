@@ -1,8 +1,10 @@
 const sendResponse = (res, statusCode, success, message, data = null) => {
-  const response = { success, message };
-  if (data) {
-    response.data = data;
-  }
+  const response = {
+    success,
+    message,
+    ...(data !== null && { data }), // adds `data` only if not null
+  };
+
   return res.status(statusCode).json(response);
 };
 

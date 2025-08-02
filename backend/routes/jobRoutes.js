@@ -1,4 +1,5 @@
 import express from "express";
+import { body } from "express-validator";
 import {
   createJob,
   getAllJobs,
@@ -8,16 +9,22 @@ import {
   applyToJob,
 } from "../controllers/jobController.js";
 import protect from "../middleware/authMiddleware.js";
-import { body } from "express-validator";
 import validateRequest from "../middleware/validate.js";
-import upload from "../controllers/uploadMiddleware.js";
+import uploadResume from "../controllers/resumeUploadController.js";
+import { isRecruiterOrAdmin, isStudent } from "../middleware/rbacMiddleware.js";
+import validateObjectId from "../middleware/objectIdValidator.js";
 
 const router = express.Router();
 
-// Create a job
+/**
+ * @route   POST /api/jobs
+ * @desc    Create a new job
+ * @access  Private (Recruiters & Admins)
+ */
 router.post(
   "/",
   protect,
+  isRecruiterOrAdmin,
   [
     body("title").notEmpty().withMessage("Title is required"),
     body("role").notEmpty().withMessage("Role is required"),
@@ -29,19 +36,58 @@ router.post(
   createJob
 );
 
-// Get all jobs
+/**
+ * @route   GET /api/jobs
+ * @desc    Get all jobs
+ * @access  Public
+ */
 router.get("/", getAllJobs);
 
-// Update a job
-router.patch("/:id", protect, updateJob);
+/**
+ * @route   GET /api/jobs/:id
+ * @desc    Get job by ID
+ * @access  Public
+ */
+router.get("/:id", validateObjectId("id"), getJobById);
 
-// Delete a job
-router.delete("/:id", protect, deleteJob);
+/**
+ * @route   PATCH /api/jobs/:id
+ * @desc    Update a job
+ * @access  Private (Recruiters & Admins)
+ */
+router.patch(
+  "/:id",
+  protect,
+  isRecruiterOrAdmin,
+  validateObjectId("id"),
+  updateJob
+);
 
-//get job by ID
-router.get("/:id", getJobById);
+/**
+ * @route   DELETE /api/jobs/:id
+ * @desc    Delete a job
+ * @access  Private (Recruiters & Admins)
+ */
+router.delete(
+  "/:id",
+  protect,
+  isRecruiterOrAdmin,
+  validateObjectId("id"),
+  deleteJob
+);
 
-// Apply to a job (with resume upload)
-router.post("/:jobId/apply", protect, upload.single("resume"), applyToJob);
+/**
+ * @route   POST /api/jobs/:jobId/apply
+ * @desc    Apply to a job (student uploads resume)
+ * @access  Private (Students only)
+ */
+router.post(
+  "/:jobId/apply",
+  protect,
+  isStudent,
+  validateObjectId("jobId"),
+  uploadResume.single("resume"),
+  applyToJob
+);
 
 export default router;

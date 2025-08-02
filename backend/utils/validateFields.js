@@ -1,15 +1,30 @@
-const validateFields = (requiredFields, data) => {
-  const missing = [];
+/**
+ * Validates required fields in a given data object.
+ *
+ * @param {string[]} requiredFields - List of required field names
+ * @param {Object} data - The data object to validate
+ * @returns {Object} Object with `isValid` boolean and array of `missingFields`
+ */
 
-  for (let field of requiredFields) {
-    if (!data[field] || data[field].toString().trim() === "") {
-      missing.push(field);
+const validateFields = (requiredFields, data) => {
+  const missingFields = [];
+
+  for (const field of requiredFields) {
+    const value = data[field];
+
+    // Allow boolean false and 0, but not null, undefined, or empty string
+    if (
+      value === undefined ||
+      value === null ||
+      (typeof value === "string" && value.trim() === "")
+    ) {
+      missingFields.push(field);
     }
   }
 
   return {
-    isValid: missing.length === 0,
-    missingFields: missing,
+    isValid: missingFields.length === 0,
+    missingFields,
   };
 };
 

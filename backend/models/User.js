@@ -17,7 +17,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["student", "recruiter"],
+      enum: ["student", "recruiter", "admin"],
       default: "student",
     },
     bookmarkedJobs: [
@@ -26,6 +26,10 @@ const userSchema = new mongoose.Schema(
         ref: "Job",
       },
     ],
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

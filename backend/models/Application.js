@@ -18,11 +18,16 @@ const applicationSchema = new mongoose.Schema(
       default: "pending",
     },
     resumeUrl: {
-      type: String, // Cloudinary URL will be stored here
+      type: String,
     },
+    // Optional future enhancement:
+    // message: { type: String, maxlength: 1000 },
   },
   { timestamps: true }
 );
+
+// Prevent duplicate applications for same job by same student
+applicationSchema.index({ job: 1, student: 1 }, { unique: true });
 
 const Application = mongoose.model("Application", applicationSchema);
 
