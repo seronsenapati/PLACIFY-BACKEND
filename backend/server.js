@@ -21,15 +21,17 @@ import "./cronJobs/autoCleanup.js"; // Importing the auto cleanup job
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT;
 
-// Set default port to 5001 since 5000 is in use by another process
-const DEFAULT_PORT = 5001;
-const PORT = process.env.PORT || DEFAULT_PORT;
+app.use(
+  cors({
+    origin: "*", // Optional: Replace with frontend domain after deployment
+    credentials: true,
+  })
+);
 
-app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
-
 app.use(helmet());
 
 const limiter = rateLimit({
@@ -43,6 +45,7 @@ app.get("/", (req, res) => {
   res.send("Welcome to Placify API");
 });
 
+// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/companies", companyRoutes);
@@ -53,7 +56,7 @@ app.use("/api/bookmarks", bookmarkRoutes);
 app.use("/api/ai", jobGeneration);
 app.use("/api/admin", adminRoutes);
 
-// Handle undefined routes
+// 404 handler
 app.all("*", (req, res) => {
   res.status(404).json({
     success: false,
@@ -61,39 +64,17 @@ app.all("*", (req, res) => {
   });
 });
 
+// Start server
 const startServer = async () => {
   try {
     await connectDB();
-    
-    // Create server instance
-    const server = app.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
     });
-    
-    // Handle server errors
-    server.on('error', (error) => {
-      if (error.code === 'EADDRINUSE' && PORT !== DEFAULT_PORT) {
-        console.log(`Port ${PORT} is in use, trying port ${DEFAULT_PORT}...`);
-        // Try to start server on default port
-        const newServer = app.listen(DEFAULT_PORT, () => {
-          console.log(`🚀 Server is running on http://localhost:${DEFAULT_PORT}`);
-        });
-        
-        newServer.on('error', (err) => {
-          console.error('Failed to start server:', err);
-          process.exit(1);
-        });
-      } else {
-        console.error('Failed to start server:', error);
-        process.exit(1);
-      }
-    });
-    
   } catch (error) {
-    console.error('Failed to connect to database:', error);
+    console.error("❌ Failed to connect to database:", error);
     process.exit(1);
   }
 };
 
-// Start the server
 startServer();
