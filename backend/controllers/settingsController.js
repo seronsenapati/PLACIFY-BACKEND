@@ -1,0 +1,114 @@
+import bcrypt from "bcryptjs";
+import User from "../models/User.js";
+import sendResponse from "../utils/sendResponse.js";
+import cloudinary from "../utils/cloudinary.js";
+import streamifier from "streamifier";
+
+// Update Profile Info: name, email, profilePic
+export const updateProfileInfo = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { name, email } = req.body;
+
+    // Validate inputs (basic example)
+    if (!name || !email) {
+      return sendResponse(res, 400, false, "Name and email are required");
+    }
+
+    // Check if email already used by someone else
+    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+    if (existingUser) {
+      return sendResponse(res, 400, false, "Email is already taken");
+    }
+
+    let profilePhotoUrl;
+
+    // If profile pic file uploaded, upload to Cloudinary
+    if (req.file) {
+      const streamUpload = () => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: "placify_profile_photos",
+              resource_type: "image",
+            },
+            (error, result) => {
+              if (result) resolve(result);
+              else reject(error);
+            }
+          );
+          streamifier.createReadStream(req.file.buffer).pipe(stream);
+        });
+      };
+      const result = await streamUpload();
+      profilePhotoUrl = result.secure_url;
+    }
+
+    // Prepare update object
+    const updateData = {
+      name,
+      email,
+    };
+    if (profilePhotoUrl) updateData.profilePhoto = profilePhotoUrl;
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Profile updated successfully",
+      updatedUser
+    );
+  } catch (error) {
+    console.error("[updateProfileInfo] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// Change Password
+export const changePassword = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { currentPassword, newPassword, confirmNewPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      return sendResponse(res, 400, false, "All password fields are required");
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "New password and confirmation do not match"
+      );
+    }
+
+    const user = await User.findById(userId).select("password");
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Check if current password matches
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return sendResponse(res, 401, false, "Current password is incorrect");
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedNewPassword;
+    await user.save();
+
+    return sendResponse(res, 200, true, "Password changed successfully");
+  } catch (error) {
+    console.error("[changePassword] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};

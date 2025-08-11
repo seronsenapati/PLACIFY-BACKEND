@@ -15,6 +15,8 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import bookmarkRoutes from "./routes/bookmarkRoutes.js";
 import jobGeneration from "./routes/jobGenAIRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import profileRoutes from "./routes/profileRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
 
 import "./cronJobs/autoCleanup.js"; // Importing the auto cleanup job
 
@@ -55,6 +57,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/bookmarks", bookmarkRoutes);
 app.use("/api/ai", jobGeneration);
 app.use("/api/admin", adminRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/settings", settingsRoutes);
 
 // 404 handler
 app.all("*", (req, res) => {

@@ -1,5 +1,37 @@
 import mongoose from "mongoose";
 
+// Define sub-schema for Education entries
+const educationSchema = new mongoose.Schema({
+  school: { type: String, required: true },
+  degree: { type: String, required: true },
+  fromYear: { type: Number },
+  toYear: { type: Number },
+});
+
+// Define sub-schema for Social Profiles
+const socialProfilesSchema = new mongoose.Schema(
+  {
+    website: { type: String },
+    linkedin: { type: String },
+    github: { type: String },
+    x: { type: String },
+  },
+  { _id: false }
+); // No _id needed for nested object
+
+// Define sub-schema for About section
+const aboutSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, required: true },
+    gender: { type: String, required: true },
+    location: { type: String, required: true },
+    primaryRole: { type: String, required: true },
+    experience: { type: Number, required: true },
+    openToRoles: [{ type: String }],
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -20,6 +52,10 @@ const userSchema = new mongoose.Schema(
       enum: ["student", "recruiter", "admin"],
       default: "student",
     },
+    profilePhoto: {
+      type: String,
+      default: null, // URL of profile picture, optional initially
+    },
     bookmarkedJobs: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -29,6 +65,22 @@ const userSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    // New fields for student profile
+    profileCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    about: aboutSchema,
+    socialProfiles: socialProfilesSchema,
+    education: [educationSchema],
+    skills: [{ type: String }],
+
+    // For recruiters: link to their company
+    company: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Company",
     },
   },
   { timestamps: true }
