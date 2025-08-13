@@ -1,3 +1,4 @@
+// controllers/authController.js
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
@@ -6,14 +7,16 @@ import sendResponse from "../utils/sendResponse.js";
 
 dotenv.config();
 
+// helper to normalize email
+const normalizeEmail = (email) =>
+  typeof email === "string" ? email.trim().toLowerCase() : email;
+
 // REGISTER USER
 export const registerUser = async (req, res) => {
   try {
-    // Always set role to 'student' by default, regardless of what was sent
-    const { name, email, password } = req.body;
-    const role = "student"; // Force default role to 'student'
+    let { name, email, password } = req.body;
+    email = normalizeEmail(email);
 
-    // Input type validation
     if (
       typeof name !== "string" ||
       typeof email !== "string" ||
@@ -27,6 +30,9 @@ export const registerUser = async (req, res) => {
       );
     }
 
+    name = name.trim();
+    password = password.trim();
+
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -37,14 +43,18 @@ export const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Default role to student
+    const role = "student";
+
     // Create new user
     const newUser = await User.create({
       name,
       email,
       password: hashedPassword,
-      role, // Now validated to be either 'student' or 'recruiter'
+      role,
     });
 
+    // create token
     const token = jwt.sign(
       { email: newUser.email, id: newUser._id, role: newUser.role },
       process.env.JWT_SECRET,
@@ -77,9 +87,9 @@ export const registerUser = async (req, res) => {
 // LOGIN USER
 export const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+    email = normalizeEmail(email);
 
-    // Input type validation
     if (typeof email !== "string" || typeof password !== "string") {
       return sendResponse(
         res,
@@ -89,7 +99,9 @@ export const loginUser = async (req, res) => {
       );
     }
 
-    // Email format validation (reuse the same regex from validation middleware)
+    password = password.trim();
+
+    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return sendResponse(
@@ -102,7 +114,6 @@ export const loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      // Don't reveal that the user doesn't exist for security reasons
       return sendResponse(res, 401, false, "Invalid credentials");
     }
 
@@ -140,7 +151,7 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// Logout User
+// LOGOUT USER
 export const logoutUser = (req, res) => {
   try {
     res.clearCookie("token");
