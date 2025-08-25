@@ -14,10 +14,11 @@ const socialProfilesSchema = new mongoose.Schema(
     website: { type: String },
     linkedin: { type: String },
     github: { type: String },
-    x: { type: String },
+    x: { type: String },  // X (Twitter)
+    instagram: { type: String }, // ✅ Added Instagram
   },
   { _id: false }
-); // No _id needed for nested object
+);
 
 // Define sub-schema for About section
 const aboutSchema = new mongoose.Schema(
@@ -54,7 +55,11 @@ const userSchema = new mongoose.Schema(
     },
     profilePhoto: {
       type: String,
-      default: null, // URL of profile picture, optional initially
+      default: null, // URL of profile picture
+    },
+    resume: {
+      type: String,
+      default: null, // ✅ resume file URL
     },
     bookmarkedJobs: [
       {
@@ -67,7 +72,7 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
-    // New fields for student profile
+    // Student profile
     profileCompleted: {
       type: Boolean,
       default: false,
@@ -77,7 +82,7 @@ const userSchema = new mongoose.Schema(
     education: [educationSchema],
     skills: [{ type: String }],
 
-    // For recruiters: link to their company
+    // Recruiter only
     company: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
