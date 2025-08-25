@@ -9,7 +9,8 @@ dotenv.config();
 // Middleware to protect routes
 export const protect = async (req, res, next) => {
   try {
-    const token = req.cookies.token;
+    // ✅ Read token from cookies OR Authorization header
+    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
 
     if (!token) {
       return sendResponse(res, 401, false, "No token, authorization denied");
@@ -33,12 +34,7 @@ export const protect = async (req, res, next) => {
     console.error("JWT Error:", error.message);
 
     if (error.name === "TokenExpiredError") {
-      return sendResponse(
-        res,
-        401,
-        false,
-        "Session expired. Please login again."
-      );
+      return sendResponse(res, 401, false, "Session expired. Please login again.");
     }
 
     return sendResponse(res, 401, false, "Invalid or expired token");
