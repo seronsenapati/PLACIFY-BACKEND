@@ -2,7 +2,7 @@ import express from "express";
 import protect from "../middleware/authMiddleware.js";
 import { getProfile, updateProfile } from "../controllers/profileController.js";
 import uploadProfilePhoto from "../controllers/uploadProfilePhoto.js";
-import uploadResume from "../controllers/uploadResume.js";
+import uploadResume from "../controllers/resumeUploadController.js";
 
 const router = express.Router();
 
