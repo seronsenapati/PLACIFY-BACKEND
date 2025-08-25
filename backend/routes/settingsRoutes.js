@@ -1,7 +1,7 @@
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
-import multer from "multer";
 import {
+  getProfileInfo,
   updateProfileInfo,
   changePassword,
 } from "../controllers/settingsController.js";
@@ -9,7 +9,10 @@ import uploadProfilePhoto from "../controllers/uploadProfilePhoto.js";
 
 const router = express.Router();
 
-// Update profile info (name, email, profile pic)
+// ✅ Get profile info (for settings page)
+router.get("/profile", protect, getProfileInfo);
+
+// ✅ Update profile info (name, email, profile pic)
 router.patch(
   "/profile",
   protect,
@@ -17,7 +20,7 @@ router.patch(
   updateProfileInfo
 );
 
-// Change password
+// ✅ Change password
 router.patch("/password", protect, changePassword);
 
 export default router;

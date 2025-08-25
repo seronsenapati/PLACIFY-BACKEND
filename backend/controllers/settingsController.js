@@ -4,13 +4,29 @@ import sendResponse from "../utils/sendResponse.js";
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
 
-// Update Profile Info: name, email, profilePic
+// ✅ Get Profile Info (for Settings page)
+export const getProfileInfo = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    return sendResponse(res, 200, true, "Profile fetched successfully", user);
+  } catch (error) {
+    console.error("[getProfileInfo] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Update Profile Info: name, email, profilePic
 export const updateProfileInfo = async (req, res) => {
   try {
     const userId = req.user._id;
     const { name, email } = req.body;
 
-    // Validate inputs (basic example)
     if (!name || !email) {
       return sendResponse(res, 400, false, "Name and email are required");
     }
@@ -23,7 +39,7 @@ export const updateProfileInfo = async (req, res) => {
 
     let profilePhotoUrl;
 
-    // If profile pic file uploaded, upload to Cloudinary
+    // If profile pic uploaded, push to Cloudinary
     if (req.file) {
       const streamUpload = () => {
         return new Promise((resolve, reject) => {
@@ -44,11 +60,7 @@ export const updateProfileInfo = async (req, res) => {
       profilePhotoUrl = result.secure_url;
     }
 
-    // Prepare update object
-    const updateData = {
-      name,
-      email,
-    };
+    const updateData = { name, email };
     if (profilePhotoUrl) updateData.profilePhoto = profilePhotoUrl;
 
     const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
@@ -69,7 +81,7 @@ export const updateProfileInfo = async (req, res) => {
   }
 };
 
-// Change Password
+// ✅ Change Password
 export const changePassword = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -93,17 +105,13 @@ export const changePassword = async (req, res) => {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    // Check if current password matches
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return sendResponse(res, 401, false, "Current password is incorrect");
     }
 
-    // Hash new password
     const salt = await bcrypt.genSalt(10);
-    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
-
-    user.password = hashedNewPassword;
+    user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
 
     return sendResponse(res, 200, true, "Password changed successfully");
