@@ -1,3 +1,4 @@
+// controllers/profileController.js
 import streamifier from "streamifier";
 import cloudinary from "../utils/cloudinary.js";
 import User from "../models/User.js";
@@ -6,8 +7,8 @@ import sendResponse from "../utils/sendResponse.js";
 
 function isProfileComplete(user) {
   return (
+    user.username && 
     user.about &&
-    user.about.username &&
     user.about.gender &&
     user.about.location &&
     user.about.primaryRole &&
@@ -83,7 +84,10 @@ export const updateProfile = async (req, res) => {
     if (updateData.education && typeof updateData.education === "string") {
       updateData.education = JSON.parse(updateData.education);
     }
-    if (updateData.socialProfiles && typeof updateData.socialProfiles === "string") {
+    if (
+      updateData.socialProfiles &&
+      typeof updateData.socialProfiles === "string"
+    ) {
       updateData.socialProfiles = JSON.parse(updateData.socialProfiles);
     }
     if (updateData.about && typeof updateData.about === "string") {

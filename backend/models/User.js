@@ -14,8 +14,8 @@ const socialProfilesSchema = new mongoose.Schema(
     website: { type: String },
     linkedin: { type: String },
     github: { type: String },
-    x: { type: String },  // X (Twitter)
-    instagram: { type: String }, // ✅ Added Instagram
+    x: { type: String }, // X (Twitter)
+    instagram: { type: String },
   },
   { _id: false }
 );
@@ -23,7 +23,6 @@ const socialProfilesSchema = new mongoose.Schema(
 // Define sub-schema for About section
 const aboutSchema = new mongoose.Schema(
   {
-    username: { type: String, required: true },
     gender: { type: String, required: true },
     location: { type: String, required: true },
     primaryRole: { type: String, required: true },
@@ -38,6 +37,11 @@ const userSchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
+    },
+    username: {
+      type: String,
+      required: true,
+      unique: true,
     },
     email: {
       type: String,
@@ -55,11 +59,11 @@ const userSchema = new mongoose.Schema(
     },
     profilePhoto: {
       type: String,
-      default: null, // URL of profile picture
+      default: null,
     },
     resume: {
       type: String,
-      default: null, // ✅ resume file URL
+      default: null,
     },
     bookmarkedJobs: [
       {

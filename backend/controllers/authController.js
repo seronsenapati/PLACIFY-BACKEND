@@ -14,29 +14,42 @@ const normalizeEmail = (email) =>
 // REGISTER USER
 export const registerUser = async (req, res) => {
   try {
-    let { name, email, password } = req.body;
+    let { name, email, password, username } = req.body; 
     email = normalizeEmail(email);
 
     if (
       typeof name !== "string" ||
       typeof email !== "string" ||
-      typeof password !== "string"
+      typeof password !== "string" ||
+      typeof username !== "string"
     ) {
       return sendResponse(
         res,
         400,
         false,
-        "Invalid input types. Name, email, and password must be strings"
+        "Invalid input types. Name, email, password, and username must be strings"
       );
     }
 
     name = name.trim();
     password = password.trim();
+    username = username.trim();
 
-    // Check if user already exists
+    // Check if user already exists by email
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return sendResponse(res, 400, false, "User already exists");
+      return sendResponse(
+        res,
+        400,
+        false,
+        "User already exists with this email"
+      );
+    }
+
+    // Check if username already exists
+    const existingUsername = await User.findOne({ username });
+    if (existingUsername) {
+      return sendResponse(res, 400, false, "Username already taken");
     }
 
     // Hash password
@@ -50,6 +63,7 @@ export const registerUser = async (req, res) => {
     const newUser = await User.create({
       name,
       email,
+      username, // ✅ root-level username
       password: hashedPassword,
       role,
     });
@@ -64,6 +78,7 @@ export const registerUser = async (req, res) => {
     const userWithoutPassword = {
       _id: newUser._id,
       name: newUser.name,
+      username: newUser.username, 
       email: newUser.email,
       role: newUser.role,
     };
@@ -131,6 +146,7 @@ export const loginUser = async (req, res) => {
     const userWithoutPassword = {
       _id: user._id,
       name: user.name,
+      username: user.username, 
       email: user.email,
       role: user.role,
     };

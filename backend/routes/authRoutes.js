@@ -6,13 +6,16 @@ import {
 } from "../controllers/authController.js";
 
 import protect from "../middleware/authMiddleware.js";
-import { validateRegistration } from "../middleware/authValidation.js";
+import {
+  validateRegistration,
+  validateLogin,
+} from "../middleware/authValidation.js";
 
 const router = express.Router();
 
 /**
  * @route   POST /api/auth/register
- * @desc    Register a new user (only student or recruiter)
+ * @desc    Register a new user (student by default, recruiter if specified)
  * @access  Public
  */
 router.post("/register", validateRegistration, registerUser);
@@ -22,11 +25,11 @@ router.post("/register", validateRegistration, registerUser);
  * @desc    Login a user (student, recruiter, or admin)
  * @access  Public
  */
-router.post("/login", loginUser);
+router.post("/login", validateLogin, loginUser);
 
 /**
  * @route   POST /api/auth/logout
- * @desc    Logout the current user
+ * @desc    Logout the current user (clears token cookie)
  * @access  Private
  */
 router.post("/logout", protect, logoutUser);
