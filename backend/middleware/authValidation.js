@@ -2,13 +2,14 @@ import sendResponse from "../utils/sendResponse.js";
 
 // ✅ Registration validation middleware
 export const validateRegistration = (req, res, next) => {
-  let { name, email, password, role = "student" } = req.body;
+  let { name, email, password, username, role = "student" } = req.body;
 
   // Type check
   if (
     typeof name !== "string" ||
     typeof email !== "string" ||
-    typeof password !== "string"
+    typeof password !== "string" ||
+    typeof username !== "string"
   ) {
     return sendResponse(res, 400, false, "Invalid input types");
   }
@@ -17,26 +18,38 @@ export const validateRegistration = (req, res, next) => {
   name = name.trim();
   email = email.trim().toLowerCase();
   password = password.trim();
+  username = username.trim();
   role = role.trim().toLowerCase();
 
   // Required fields
-  if (!name || !email || !password) {
+  if (!name || !email || !password || !username) {
     return sendResponse(
       res,
       400,
       false,
-      "Name, email, and password are required"
+      "Name, username, email, and password are required"
     );
   }
 
-  // Name validation (only letters + spaces, 2–50 chars)
+  // Name validation
   const nameRegex = /^[a-zA-Z\s]{2,50}$/;
   if (!nameRegex.test(name)) {
     return sendResponse(
       res,
       400,
       false,
-      "Name must be 2–50 characters and contain only letters and spaces"
+      "Name must be 2-50 characters and contain only letters and spaces"
+    );
+  }
+
+  // Username validation (letters, numbers, underscore, 3–20 chars)
+  const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+  if (!usernameRegex.test(username)) {
+    return sendResponse(
+      res,
+      400,
+      false,
+      "Username must be 3-20 characters and contain only letters, numbers, or underscores"
     );
   }
 
@@ -74,8 +87,8 @@ export const validateRegistration = (req, res, next) => {
     );
   }
 
-  // Pass data forward
-  req.body = { name, email, password, role };
+  // Pass sanitized data forward
+  req.body = { name, email, password, username, role };
   next();
 };
 
@@ -84,7 +97,7 @@ export const validateLogin = (req, res, next) => {
   let { email, password } = req.body;
 
   if (typeof email !== "string" || typeof password !== "string") {
-    return sendResponse(res, 400, false, "Email and password must be strings");
+    return sendResponse(res, 400, false, "Invalid input types");
   }
 
   email = email.trim().toLowerCase();
