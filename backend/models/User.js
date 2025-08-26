@@ -23,7 +23,7 @@ const socialProfilesSchema = new mongoose.Schema(
 // Define sub-schema for About section
 const aboutSchema = new mongoose.Schema(
   {
-    fullName: { type: String, required: true },
+    username: { type: String, required: true },
     gender: { type: String, required: true },
     location: { type: String, required: true },
     primaryRole: { type: String, required: true },

@@ -7,7 +7,7 @@ import sendResponse from "../utils/sendResponse.js";
 function isProfileComplete(user) {
   return (
     user.about &&
-    user.about.fullName &&
+    user.about.username &&
     user.about.gender &&
     user.about.location &&
     user.about.primaryRole &&
