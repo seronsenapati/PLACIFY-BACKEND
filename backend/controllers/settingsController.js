@@ -21,20 +21,34 @@ export const getProfileInfo = async (req, res) => {
   }
 };
 
-// ✅ Update Profile Info: name, email, profilePic
+// ✅ Update Profile Info: name, username, email, profilePic
 export const updateProfileInfo = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { name, email } = req.body;
+    const { name, username, email } = req.body;
 
-    if (!name || !email) {
-      return sendResponse(res, 400, false, "Name and email are required");
+    if (!name || !username || !email) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Name, username and email are required"
+      );
     }
 
     // Check if email already used by someone else
-    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
-    if (existingUser) {
+    const existingEmail = await User.findOne({ email, _id: { $ne: userId } });
+    if (existingEmail) {
       return sendResponse(res, 400, false, "Email is already taken");
+    }
+
+    // Check if username already used by someone else
+    const existingUsername = await User.findOne({
+      username,
+      _id: { $ne: userId },
+    });
+    if (existingUsername) {
+      return sendResponse(res, 400, false, "Username is already taken");
     }
 
     let profilePhotoUrl;
@@ -60,7 +74,7 @@ export const updateProfileInfo = async (req, res) => {
       profilePhotoUrl = result.secure_url;
     }
 
-    const updateData = { name, email };
+    const updateData = { name, username, email };
     if (profilePhotoUrl) updateData.profilePhoto = profilePhotoUrl;
 
     const updatedUser = await User.findByIdAndUpdate(userId, updateData, {

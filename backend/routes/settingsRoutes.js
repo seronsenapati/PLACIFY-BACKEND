@@ -12,7 +12,7 @@ const router = express.Router();
 // ✅ Get profile info (for settings page)
 router.get("/profile", protect, getProfileInfo);
 
-// ✅ Update profile info (name, email, profile pic)
+// ✅ Update profile info (name, username, email, profile pic)
 router.patch(
   "/profile",
   protect,
