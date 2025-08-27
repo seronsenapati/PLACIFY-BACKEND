@@ -1,4 +1,3 @@
-// controllers/profileController.js
 import streamifier from "streamifier";
 import cloudinary from "../utils/cloudinary.js";
 import User from "../models/User.js";
@@ -7,7 +6,7 @@ import sendResponse from "../utils/sendResponse.js";
 
 function isProfileComplete(user) {
   return (
-    user.username && 
+    user.name &&
     user.about &&
     user.about.gender &&
     user.about.location &&
