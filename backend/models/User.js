@@ -4,8 +4,8 @@ import mongoose from "mongoose";
 const educationSchema = new mongoose.Schema({
   school: { type: String, required: true },
   degree: { type: String, required: true },
-  fromYear: { type: Number },
-  toYear: { type: Number },
+  fromYear: { type: Number, required: true },
+  toYear: { type: Number, required: true },
 });
 
 // Define sub-schema for Social Profiles
