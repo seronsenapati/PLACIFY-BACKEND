@@ -11,6 +11,7 @@ function isProfileComplete(user) {
     user.about.gender &&
     user.about.location &&
     user.about.primaryRole &&
+    user.about.experience !== undefined && // Check if experience exists
     user.skills.length > 0 &&
     user.education.length > 0 &&
     user.profilePhoto &&
@@ -121,24 +122,33 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    // Handle yearsOfExperience - convert to integer
+    // Handle experience data - move yearsOfExperience to about.experience
     if (updateData.yearsOfExperience !== undefined) {
-      updateData.yearsOfExperience =
-        parseInt(updateData.yearsOfExperience) || 0;
+      if (!updateData.about) {
+        updateData.about = {};
+      }
+      updateData.about.experience = parseInt(updateData.yearsOfExperience) || 0;
+      delete updateData.yearsOfExperience;
     }
 
-    // Remove any experience array if it exists (legacy format)
+    // Remove any legacy experience array if it exists
     if (updateData.experience) {
       delete updateData.experience;
     }
 
     // Validate required fields
     if (updateData.about) {
-      const requiredFields = ["gender", "location", "primaryRole"];
+      const requiredFields = [
+        "gender",
+        "location",
+        "primaryRole",
+        "experience",
+      ];
       const missingFields = requiredFields.filter(
         (field) =>
           updateData.about[field] === undefined ||
-          updateData.about[field] === ""
+          updateData.about[field] === "" ||
+          updateData.about[field] === null
       );
 
       if (missingFields.length > 0) {
