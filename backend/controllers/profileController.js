@@ -113,7 +113,7 @@ export const updateProfile = async (req, res) => {
       "education",
       "socialProfiles",
       "about",
-      "experience",
+      "openToRoles",
     ];
     for (const field of fieldsToParse) {
       if (!parseField(field)) {
@@ -121,15 +121,15 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    // Handle experience data
-    if (
-      updateData.experience &&
-      Array.isArray(updateData.experience) &&
-      updateData.experience.length > 0
-    ) {
+    // Handle yearsOfExperience - convert to integer
+    if (updateData.yearsOfExperience !== undefined) {
       updateData.yearsOfExperience =
-        updateData.experience[0].yearsOfExperience || 0;
-      delete updateData.experience; // Remove the array as we're only storing yearsOfExperience
+        parseInt(updateData.yearsOfExperience) || 0;
+    }
+
+    // Remove any experience array if it exists (legacy format)
+    if (updateData.experience) {
+      delete updateData.experience;
     }
 
     // Validate required fields
