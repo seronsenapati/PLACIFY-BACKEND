@@ -13,7 +13,7 @@ const openRouterAPI = axios.create({
   baseURL: "https://openrouter.ai/api/v1",
   headers: {
     Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-    "HTTP-Referer": process.env.SITE_URL || "https://placify.app", // Optionally set in .env
+    "HTTP-Referer": process.env.SITE_URL ,
     "X-Title": "Placify Job Generator",
   },
 });
