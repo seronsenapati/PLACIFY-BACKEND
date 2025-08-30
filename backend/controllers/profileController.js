@@ -36,7 +36,11 @@ export const getProfile = async (req, res) => {
 
     return sendResponse(res, 200, true, "Profile fetched", user);
   } catch (err) {
-    console.error("Get Profile Error:", err);
+    console.error("Get Profile Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
+    });
     return sendResponse(res, 500, false, "Server error");
   }
 };
@@ -46,61 +50,118 @@ export const updateProfile = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
-    // ✅ Profile Photo Upload
+    // Handle profile photo upload
     if (req.file && req.file.fieldname === "profilePhoto") {
-      const streamUpload = () =>
-        new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            { folder: "placify_profilePhotos", resource_type: "image" },
-            (error, result) => (result ? resolve(result) : reject(error))
-          );
-          streamifier.createReadStream(req.file.buffer).pipe(stream);
-        });
+      try {
+        const streamUpload = () =>
+          new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: "placify_profilePhotos", resource_type: "image" },
+              (error, result) => (result ? resolve(result) : reject(error))
+            );
+            streamifier.createReadStream(req.file.buffer).pipe(stream);
+          });
 
-      const result = await streamUpload();
-      updateData.profilePhoto = result.secure_url;
+        const result = await streamUpload();
+        updateData.profilePhoto = result.secure_url;
+      } catch (uploadError) {
+        console.error("Profile photo upload error:", uploadError);
+        return sendResponse(res, 400, false, "Error uploading profile photo");
+      }
     }
 
-    // ✅ Resume Upload
+    // Handle resume upload
     if (req.file && req.file.fieldname === "resume") {
-      const streamUpload = () =>
-        new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            { folder: "placify_resumes", resource_type: "raw", format: "pdf" },
-            (error, result) => (result ? resolve(result) : reject(error))
-          );
-          streamifier.createReadStream(req.file.buffer).pipe(stream);
-        });
+      try {
+        const streamUpload = () =>
+          new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                folder: "placify_resumes",
+                resource_type: "raw",
+                format: "pdf",
+              },
+              (error, result) => (result ? resolve(result) : reject(error))
+            );
+            streamifier.createReadStream(req.file.buffer).pipe(stream);
+          });
 
-      const result = await streamUpload();
-      updateData.resume = result.secure_url;
+        const result = await streamUpload();
+        updateData.resume = result.secure_url;
+      } catch (uploadError) {
+        console.error("Resume upload error:", uploadError);
+        return sendResponse(res, 400, false, "Error uploading resume");
+      }
     }
 
-    // ✅ Parse JSON fields if sent as strings
-    if (updateData.skills && typeof updateData.skills === "string") {
-      updateData.skills = JSON.parse(updateData.skills);
+    // Parse JSON fields if sent as strings
+    const parseField = (field) => {
+      if (updateData[field] && typeof updateData[field] === "string") {
+        try {
+          updateData[field] = JSON.parse(updateData[field]);
+        } catch (e) {
+          console.error(`Error parsing ${field}:`, e);
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // Parse all JSON fields
+    const fieldsToParse = [
+      "skills",
+      "education",
+      "socialProfiles",
+      "about",
+      "experience",
+    ];
+    for (const field of fieldsToParse) {
+      if (!parseField(field)) {
+        return sendResponse(res, 400, false, `Invalid ${field} format`);
+      }
     }
-    if (updateData.education && typeof updateData.education === "string") {
-      updateData.education = JSON.parse(updateData.education);
-    }
+
+    // Handle experience data
     if (
-      updateData.socialProfiles &&
-      typeof updateData.socialProfiles === "string"
+      updateData.experience &&
+      Array.isArray(updateData.experience) &&
+      updateData.experience.length > 0
     ) {
-      updateData.socialProfiles = JSON.parse(updateData.socialProfiles);
+      updateData.yearsOfExperience =
+        updateData.experience[0].yearsOfExperience || 0;
+      delete updateData.experience; // Remove the array as we're only storing yearsOfExperience
     }
-    if (updateData.about && typeof updateData.about === "string") {
-      updateData.about = JSON.parse(updateData.about);
+
+    // Validate required fields
+    if (updateData.about) {
+      const requiredFields = ["gender", "location", "primaryRole"];
+      const missingFields = requiredFields.filter(
+        (field) =>
+          updateData.about[field] === undefined ||
+          updateData.about[field] === ""
+      );
+
+      if (missingFields.length > 0) {
+        return sendResponse(
+          res,
+          400,
+          false,
+          `Missing required fields in about: ${missingFields.join(", ")}`
+        );
+      }
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.user._id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select("-password -__v");
 
-    if (!updatedUser) return sendResponse(res, 404, false, "User not found");
+    if (!updatedUser) {
+      return sendResponse(res, 404, false, "User not found");
+    }
 
-    // ✅ Profile Completion Flag
+    // Update profile completion status
     const profileCompleted = isProfileComplete(updatedUser);
     if (profileCompleted !== updatedUser.profileCompleted) {
       updatedUser.profileCompleted = profileCompleted;
@@ -109,7 +170,18 @@ export const updateProfile = async (req, res) => {
 
     return sendResponse(res, 200, true, "Profile updated", updatedUser);
   } catch (err) {
-    console.error("Update Profile Error:", err);
+    console.error("Update Profile Error:", {
+      message: err.message,
+      stack: err.stack,
+      body: req.body,
+      file: req.file
+        ? {
+            fieldname: req.file.fieldname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+          }
+        : null,
+    });
     return sendResponse(res, 500, false, "Server error");
   }
 };
