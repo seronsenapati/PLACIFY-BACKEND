@@ -5,46 +5,201 @@ import Company from "../models/Company.js";
 import sendResponse from "../utils/sendResponse.js";
 
 function isProfileComplete(user) {
-  // Check for social links - must have at least one non-empty social link
-  const socialLinks = user.socialProfiles || {};
-  const hasAtLeastOneSocialLink = Object.values(socialLinks).some(
-    (link) => link && link.trim() && link.trim().length > 0
+  try {
+    // Enhanced validation for required fields
+    const requiredFields = {
+      name: user.name && user.name.trim().length > 0,
+      about:
+        user.about &&
+        user.about.gender &&
+        user.about.gender.trim().length > 0 &&
+        user.about.location &&
+        user.about.location.trim().length > 0 &&
+        user.about.primaryRole &&
+        user.about.primaryRole.trim().length > 0 &&
+        typeof user.about.experience === "number" &&
+        user.about.experience >= 0,
+      skills:
+        user.skills && Array.isArray(user.skills) && user.skills.length > 0,
+      education:
+        user.education &&
+        Array.isArray(user.education) &&
+        user.education.length > 0,
+      openToRoles:
+        user.openToRoles &&
+        Array.isArray(user.openToRoles) &&
+        user.openToRoles.length > 0,
+      profilePhoto: user.profilePhoto && user.profilePhoto.trim().length > 0,
+      resume: user.resume && user.resume.trim().length > 0,
+    };
+
+    // Check for social links - must have at least one non-empty social link
+    const socialLinks = user.socialProfiles || {};
+    const hasAtLeastOneSocialLink = Object.values(socialLinks).some(
+      (link) => link && typeof link === "string" && link.trim().length > 0
+    );
+    requiredFields.socialProfiles = hasAtLeastOneSocialLink;
+
+    // Log validation details for debugging
+    console.log("Profile completion validation:", {
+      userId: user._id,
+      requiredFields,
+      isComplete: Object.values(requiredFields).every(Boolean),
+    });
+
+    return Object.values(requiredFields).every(Boolean);
+  } catch (error) {
+    console.error("Error in isProfileComplete:", error);
+    return false;
+  }
+}
+
+// Validate and sanitize education data
+function validateEducation(education) {
+  if (!Array.isArray(education)) return [];
+
+  return education
+    .filter((edu) => edu && typeof edu === "object")
+    .map((edu) => {
+      const cleaned = {
+        degree: typeof edu.degree === "string" ? edu.degree.trim() : "",
+        school:
+          typeof edu.school === "string"
+            ? edu.school.trim()
+            : typeof edu.institution === "string"
+            ? edu.institution.trim()
+            : "",
+        fromYear: parseInt(edu.fromYear) || 0,
+        toYear: edu.toYear ? parseInt(edu.toYear) : null,
+      };
+
+      // Additional validation
+      if (cleaned.toYear && cleaned.toYear < cleaned.fromYear) {
+        cleaned.toYear = null; // Reset invalid toYear
+      }
+
+      return cleaned;
+    })
+    .filter(
+      (edu) =>
+        edu.degree &&
+        edu.degree.length > 0 &&
+        edu.school &&
+        edu.school.length > 0 &&
+        edu.fromYear &&
+        edu.fromYear >= 1950 &&
+        edu.fromYear <= new Date().getFullYear() + 5
+    );
+}
+
+// Validate and sanitize skills array
+function validateSkills(skills) {
+  if (!Array.isArray(skills)) return [];
+
+  return skills
+    .map((skill) => (typeof skill === "string" ? skill.trim() : ""))
+    .filter((skill) => skill && skill.length > 0 && skill.length <= 50) // Limit skill length
+    .slice(0, 50); // Limit number of skills
+}
+
+// Validate and sanitize openToRoles array
+function validateOpenToRoles(openToRoles) {
+  if (!Array.isArray(openToRoles)) return [];
+
+  return openToRoles
+    .map((role) => (typeof role === "string" ? role.trim() : ""))
+    .filter((role) => role && role.length > 0 && role.length <= 100) // Limit role length
+    .slice(0, 20); // Limit number of roles
+}
+
+// Validate and sanitize social profiles
+function validateSocialProfiles(socialProfiles) {
+  if (!socialProfiles || typeof socialProfiles !== "object") return {};
+
+  const allowedFields = ["linkedin", "github", "x", "instagram", "website"];
+  const cleaned = {};
+
+  allowedFields.forEach((field) => {
+    if (socialProfiles[field] && typeof socialProfiles[field] === "string") {
+      const cleanedValue = socialProfiles[field].trim();
+      if (
+        cleanedValue &&
+        cleanedValue.length > 0 &&
+        cleanedValue.length <= 500
+      ) {
+        cleaned[field] = cleanedValue;
+      }
+    }
+  });
+
+  return cleaned;
+}
+
+// Validate about object
+function validateAbout(about) {
+  if (!about || typeof about !== "object") {
+    throw new Error("About information is required");
+  }
+
+  const required = ["gender", "location", "primaryRole"];
+  const missing = required.filter(
+    (field) =>
+      !about[field] ||
+      typeof about[field] !== "string" ||
+      about[field].trim().length === 0
   );
 
-  return (
-    user.name &&
-    user.about &&
-    user.about.gender &&
-    user.about.location &&
-    user.about.primaryRole &&
-    user.about.experience !== undefined && // Check if experience exists
-    user.skills &&
-    user.skills.length > 0 &&
-    user.education &&
-    user.education.length > 0 &&
-    user.openToRoles &&
-    user.openToRoles.length > 0 && // FIXED: Added openToRoles check
-    user.profilePhoto &&
-    user.resume &&
-    hasAtLeastOneSocialLink // FIXED: Added social links check
-  );
+  if (missing.length > 0) {
+    throw new Error(`Missing required fields in about: ${missing.join(", ")}`);
+  }
+
+  const experience = parseInt(about.experience);
+  if (isNaN(experience) || experience < 0 || experience > 70) {
+    throw new Error("Experience must be a valid number between 0 and 70");
+  }
+
+  return {
+    gender: about.gender.trim(),
+    location: about.location.trim(),
+    primaryRole: about.primaryRole.trim(),
+    experience: experience,
+  };
 }
 
 // GET Profile
 export const getProfile = async (req, res) => {
   try {
+    console.log("GET Profile request:", { userId: req.user._id });
+
     const user = await User.findById(req.user._id).select("-password -__v");
-    if (!user) return sendResponse(res, 404, false, "User not found");
+    if (!user) {
+      console.log("User not found:", req.user._id);
+      return sendResponse(res, 404, false, "User not found");
+    }
 
     if (user.role === "recruiter") {
       const company = await Company.findById(user.company).select(
         "name location desc website logo createdAt updatedAt"
       );
+
+      console.log("Recruiter profile fetched:", {
+        userId: user._id,
+        hasCompany: !!company,
+      });
+
       return sendResponse(res, 200, true, "Profile fetched", {
         ...user.toObject(),
         company: company || null,
       });
     }
+
+    console.log("Student profile fetched:", {
+      userId: user._id,
+      profileCompleted: user.profileCompleted,
+      hasEducation: user.education?.length || 0,
+      hasSkills: user.skills?.length || 0,
+      hasOpenToRoles: user.openToRoles?.length || 0,
+    });
 
     return sendResponse(res, 200, true, "Profile fetched", user);
   } catch (err) {
@@ -53,288 +208,253 @@ export const getProfile = async (req, res) => {
       stack: err.stack,
       userId: req.user?._id,
     });
-    return sendResponse(res, 500, false, "Server error");
+    return sendResponse(res, 500, false, "Server error", null, {
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
   }
 };
 
 // UPDATE Profile
 export const updateProfile = async (req, res) => {
+  let updateData = null;
+
   try {
-    let updateData = { ...req.body };
+    updateData = { ...req.body };
 
     console.log("Update Profile Request:", {
       userId: req.user._id,
-      body: req.body,
-      file: req.file
-        ? {
-            fieldname: req.file.fieldname,
-            mimetype: req.file.mimetype,
-            size: req.file.size,
-            originalname: req.file.originalname,
-          }
-        : null,
+      bodyKeys: Object.keys(req.body),
+      hasFile: !!req.file,
+      fileType: req.file?.fieldname,
+      bodySize: JSON.stringify(req.body).length,
     });
 
-    // Handle profile photo upload
-    if (req.file && req.file.fieldname === "profilePhoto") {
+    // Handle file uploads
+    if (req.file) {
       try {
-        console.log("Uploading profile photo to Cloudinary...");
-        const streamUpload = () =>
+        console.log("Processing file upload:", {
+          fieldname: req.file.fieldname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          originalname: req.file.originalname,
+        });
+
+        const streamUpload = (folder, resourceType = "image") =>
           new Promise((resolve, reject) => {
+            const uploadOptions = {
+              folder: folder,
+              resource_type: resourceType,
+            };
+
+            if (resourceType === "raw") {
+              uploadOptions.format = "pdf";
+            }
+
             const stream = cloudinary.uploader.upload_stream(
-              { folder: "placify_profilePhotos", resource_type: "image" },
+              uploadOptions,
               (error, result) => (result ? resolve(result) : reject(error))
             );
             streamifier.createReadStream(req.file.buffer).pipe(stream);
           });
 
-        const result = await streamUpload();
-        updateData.profilePhoto = result.secure_url;
-        console.log("Profile photo uploaded successfully:", result.secure_url);
+        let result;
+        if (req.file.fieldname === "profilePhoto") {
+          result = await streamUpload("placify_profilePhotos", "image");
+          updateData.profilePhoto = result.secure_url;
+          console.log("Profile photo uploaded:", result.secure_url);
+        } else if (req.file.fieldname === "resume") {
+          result = await streamUpload("placify_resumes", "raw");
+          updateData.resume = result.secure_url;
+          console.log("Resume uploaded:", result.secure_url);
+        }
       } catch (uploadError) {
-        console.error("Profile photo upload error:", {
-          error: uploadError,
-          message: uploadError.message,
+        console.error("File upload error:", {
+          error: uploadError.message,
           stack: uploadError.stack,
         });
-        return sendResponse(res, 400, false, "Error uploading profile photo");
-      }
-    }
-
-    // Handle resume upload
-    if (req.file && req.file.fieldname === "resume") {
-      try {
-        console.log("Uploading resume to Cloudinary...");
-        const streamUpload = () =>
-          new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              {
-                folder: "placify_resumes",
-                resource_type: "raw",
-                format: "pdf",
-              },
-              (error, result) => (result ? resolve(result) : reject(error))
-            );
-            streamifier.createReadStream(req.file.buffer).pipe(stream);
-          });
-
-        const result = await streamUpload();
-        updateData.resume = result.secure_url;
-        console.log("Resume uploaded successfully:", result.secure_url);
-      } catch (uploadError) {
-        console.error("Resume upload error:", {
-          error: uploadError,
-          message: uploadError.message,
-          stack: uploadError.stack,
-        });
-        return sendResponse(res, 400, false, "Error uploading resume");
-      }
-    }
-
-    // Parse JSON fields if sent as strings
-    const parseField = (field) => {
-      if (updateData[field] && typeof updateData[field] === "string") {
-        try {
-          updateData[field] = JSON.parse(updateData[field]);
-        } catch (e) {
-          console.error(`Error parsing ${field}:`, e);
-          return false;
-        }
-      }
-      return true;
-    };
-
-    // Parse all JSON fields - FIXED: Ensure openToRoles is properly parsed
-    const fieldsToParse = [
-      "skills",
-      "education",
-      "socialProfiles",
-      "about",
-      "openToRoles", // FIXED: Ensure this is included in parsing
-    ];
-    for (const field of fieldsToParse) {
-      if (!parseField(field)) {
-        return sendResponse(res, 400, false, `Invalid ${field} format`);
-      }
-    }
-
-    // Handle experience data - move yearsOfExperience to about.experience
-    if (updateData.yearsOfExperience !== undefined) {
-      if (!updateData.about) {
-        updateData.about = {};
-      }
-      updateData.about.experience = parseInt(updateData.yearsOfExperience) || 0;
-      delete updateData.yearsOfExperience;
-    }
-
-    // Remove any legacy experience array if it exists
-    if (updateData.experience) {
-      delete updateData.experience;
-    }
-
-    // FIXED: Validate and clean openToRoles data
-    if (updateData.openToRoles) {
-      if (Array.isArray(updateData.openToRoles)) {
-        // Clean and filter openToRoles
-        updateData.openToRoles = updateData.openToRoles
-          .map((role) => (typeof role === "string" ? role.trim() : ""))
-          .filter((role) => role && role.length > 0);
-      } else {
-        // If it's not an array, set it to empty array
-        updateData.openToRoles = [];
-      }
-    } else {
-      // Ensure openToRoles exists as an array
-      updateData.openToRoles = [];
-    }
-
-    // FIXED: Validate and clean skills data
-    if (updateData.skills) {
-      if (Array.isArray(updateData.skills)) {
-        updateData.skills = updateData.skills
-          .map((skill) => (typeof skill === "string" ? skill.trim() : ""))
-          .filter((skill) => skill && skill.length > 0);
-      } else {
-        updateData.skills = [];
-      }
-    }
-
-    // FIXED: Validate and clean education data
-    if (updateData.education) {
-      if (Array.isArray(updateData.education)) {
-        updateData.education = updateData.education
-          .filter((edu) => edu && typeof edu === "object")
-          .map((edu) => ({
-            degree: edu.degree ? edu.degree.trim() : "",
-            school: edu.school ? edu.school.trim() : "", // Backend uses 'school' field
-            fromYear: parseInt(edu.fromYear) || 0,
-            toYear: edu.toYear ? parseInt(edu.toYear) : null,
-          }))
-          .filter((edu) => edu.degree && edu.school && edu.fromYear);
-      } else {
-        updateData.education = [];
-      }
-    }
-
-    // FIXED: Validate and clean socialProfiles data
-    if (
-      updateData.socialProfiles &&
-      typeof updateData.socialProfiles === "object"
-    ) {
-      const cleanedSocialProfiles = {};
-      const allowedFields = ["linkedin", "github", "x", "instagram", "website"];
-
-      allowedFields.forEach((field) => {
-        if (
-          updateData.socialProfiles[field] &&
-          typeof updateData.socialProfiles[field] === "string"
-        ) {
-          const cleanedValue = updateData.socialProfiles[field].trim();
-          if (cleanedValue) {
-            cleanedSocialProfiles[field] = cleanedValue;
-          }
-        }
-      });
-
-      updateData.socialProfiles = cleanedSocialProfiles;
-    }
-
-    // Validate required fields in about object
-    if (updateData.about) {
-      const requiredFields = [
-        "gender",
-        "location",
-        "primaryRole",
-        "experience",
-      ];
-      const missingFields = requiredFields.filter(
-        (field) =>
-          updateData.about[field] === undefined ||
-          updateData.about[field] === "" ||
-          updateData.about[field] === null
-      );
-
-      if (missingFields.length > 0) {
         return sendResponse(
           res,
           400,
           false,
-          `Missing required fields in about: ${missingFields.join(", ")}`
+          `Error uploading ${req.file.fieldname}: ${uploadError.message}`
         );
       }
+    }
 
-      // FIXED: Validate experience is a valid number
-      if (updateData.about.experience !== undefined) {
-        const expValue = parseInt(updateData.about.experience);
-        if (isNaN(expValue) || expValue < 0) {
+    // Parse JSON fields if sent as strings
+    const jsonFields = [
+      "skills",
+      "education",
+      "socialProfiles",
+      "about",
+      "openToRoles",
+    ];
+
+    for (const field of jsonFields) {
+      if (updateData[field] && typeof updateData[field] === "string") {
+        try {
+          updateData[field] = JSON.parse(updateData[field]);
+        } catch (parseError) {
+          console.error(`Error parsing ${field}:`, parseError.message);
           return sendResponse(
             res,
             400,
             false,
-            "Experience must be a valid number (0 or greater)"
+            `Invalid ${field} format: ${parseError.message}`
           );
         }
-        updateData.about.experience = expValue;
       }
     }
 
-    console.log("Cleaned update data being sent to database:", {
-      ...updateData,
-      openToRolesLength: updateData.openToRoles
-        ? updateData.openToRoles.length
-        : 0,
-      skillsLength: updateData.skills ? updateData.skills.length : 0,
-      educationLength: updateData.education ? updateData.education.length : 0,
+    // Handle legacy experience field migration
+    if (updateData.yearsOfExperience !== undefined) {
+      if (!updateData.about) updateData.about = {};
+      updateData.about.experience = parseInt(updateData.yearsOfExperience) || 0;
+      delete updateData.yearsOfExperience;
+    }
+
+    // Remove legacy experience array
+    if (updateData.experience) {
+      delete updateData.experience;
+    }
+
+    // Validate and clean data
+    if (updateData.about) {
+      updateData.about = validateAbout(updateData.about);
+    }
+
+    if (updateData.education !== undefined) {
+      updateData.education = validateEducation(updateData.education);
+    }
+
+    if (updateData.skills !== undefined) {
+      updateData.skills = validateSkills(updateData.skills);
+    }
+
+    if (updateData.openToRoles !== undefined) {
+      updateData.openToRoles = validateOpenToRoles(updateData.openToRoles);
+    }
+
+    if (updateData.socialProfiles !== undefined) {
+      updateData.socialProfiles = validateSocialProfiles(
+        updateData.socialProfiles
+      );
+    }
+
+    // Additional validation for name
+    if (updateData.name !== undefined) {
+      if (
+        typeof updateData.name !== "string" ||
+        updateData.name.trim().length === 0
+      ) {
+        return sendResponse(
+          res,
+          400,
+          false,
+          "Name is required and must be a non-empty string"
+        );
+      }
+      updateData.name = updateData.name.trim();
+      if (updateData.name.length > 100) {
+        return sendResponse(
+          res,
+          400,
+          false,
+          "Name must be less than 100 characters"
+        );
+      }
+    }
+
+    console.log("Cleaned update data:", {
+      hasName: !!updateData.name,
+      hasAbout: !!updateData.about,
+      educationCount: updateData.education?.length || 0,
+      skillsCount: updateData.skills?.length || 0,
+      openToRolesCount: updateData.openToRoles?.length || 0,
       socialProfilesKeys: updateData.socialProfiles
         ? Object.keys(updateData.socialProfiles)
         : [],
+      hasProfilePhoto: !!updateData.profilePhoto,
+      hasResume: !!updateData.resume,
     });
 
+    // Update user in database
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },
-      { new: true, runValidators: true }
-    ).select("-password -__v");
+      {
+        new: true,
+        runValidators: true,
+        select: "-password -__v",
+      }
+    );
 
     if (!updatedUser) {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    // FIXED: Update profile completion status with correct validation
+    // Update profile completion status
     const profileCompleted = isProfileComplete(updatedUser);
     if (profileCompleted !== updatedUser.profileCompleted) {
       updatedUser.profileCompleted = profileCompleted;
       await updatedUser.save();
+      console.log("Profile completion status updated:", {
+        userId: updatedUser._id,
+        newStatus: profileCompleted,
+      });
     }
 
     console.log("Profile updated successfully:", {
       userId: updatedUser._id,
       profileCompleted: updatedUser.profileCompleted,
-      openToRolesCount: updatedUser.openToRoles
-        ? updatedUser.openToRoles.length
-        : 0,
-      skillsCount: updatedUser.skills ? updatedUser.skills.length : 0,
-      educationCount: updatedUser.education ? updatedUser.education.length : 0,
-      socialProfilesCount: updatedUser.socialProfiles
-        ? Object.keys(updatedUser.socialProfiles).length
-        : 0,
+      fieldsUpdated: Object.keys(updateData),
     });
 
-    return sendResponse(res, 200, true, "Profile updated", updatedUser);
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Profile updated successfully",
+      updatedUser
+    );
   } catch (err) {
     console.error("Update Profile Error:", {
       message: err.message,
       stack: err.stack,
-      body: req.body,
-      file: req.file
+      userId: req.user?._id,
+      updateData: updateData
         ? {
-            fieldname: req.file.fieldname,
-            mimetype: req.file.mimetype,
-            size: req.file.size,
+            hasName: !!updateData.name,
+            hasAbout: !!updateData.about,
+            hasEducation: !!updateData.education,
+            hasSkills: !!updateData.skills,
+            hasOpenToRoles: !!updateData.openToRoles,
+            hasSocialProfiles: !!updateData.socialProfiles,
           }
         : null,
+      validationError: err.name === "ValidationError" ? err.message : undefined,
     });
-    return sendResponse(res, 500, false, "Server error");
+
+    // Handle specific error types
+    if (err.name === "ValidationError") {
+      const errors = Object.values(err.errors).map((e) => e.message);
+      return sendResponse(
+        res,
+        400,
+        false,
+        `Validation failed: ${errors.join(", ")}`
+      );
+    }
+
+    if (err.name === "CastError") {
+      return sendResponse(res, 400, false, "Invalid data format provided");
+    }
+
+    return sendResponse(res, 500, false, "Server error", null, {
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
   }
 };
 
@@ -351,7 +471,6 @@ export const deleteResume = async (req, res) => {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    // Check if user has a resume
     if (!user.resume) {
       return sendResponse(res, 400, false, "No resume found to delete");
     }
@@ -362,17 +481,29 @@ export const deleteResume = async (req, res) => {
     // Extract public_id from Cloudinary URL for deletion
     if (oldResumeUrl && oldResumeUrl.includes("cloudinary.com")) {
       try {
-        // Extract public_id from URL (format: .../placify_resumes/filename.pdf)
+        // More robust public_id extraction
         const urlParts = oldResumeUrl.split("/");
-        const filename = urlParts[urlParts.length - 1];
-        const publicId = `placify_resumes/${filename.split(".")[0]}`;
+        const versionIndex = urlParts.findIndex((part) => part.startsWith("v"));
 
-        console.log(
-          "Attempting to delete from Cloudinary with public_id:",
-          publicId
-        );
+        let publicIdParts;
+        if (versionIndex > 0) {
+          // URL has version, get parts after version
+          publicIdParts = urlParts.slice(versionIndex + 1);
+        } else {
+          // No version, get last parts
+          publicIdParts = urlParts.slice(-2);
+        }
 
-        // Delete from Cloudinary
+        const filename = publicIdParts[publicIdParts.length - 1];
+        const folder =
+          publicIdParts.length > 1 ? publicIdParts[0] : "placify_resumes";
+        const publicId = `${folder}/${filename.split(".")[0]}`;
+
+        console.log("Attempting to delete from Cloudinary:", {
+          originalUrl: oldResumeUrl,
+          extractedPublicId: publicId,
+        });
+
         const cloudinaryResult = await cloudinary.uploader.destroy(publicId, {
           resource_type: "raw",
         });
@@ -380,9 +511,9 @@ export const deleteResume = async (req, res) => {
         console.log("Cloudinary deletion result:", cloudinaryResult);
       } catch (cloudinaryError) {
         console.error("Error deleting from Cloudinary:", {
-          error: cloudinaryError,
-          message: cloudinaryError.message,
-          publicId: oldResumeUrl,
+          error: cloudinaryError.message,
+          stack: cloudinaryError.stack,
+          resumeUrl: oldResumeUrl,
         });
         // Continue with database update even if Cloudinary deletion fails
       }
@@ -392,10 +523,10 @@ export const deleteResume = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
       { $unset: { resume: 1 } },
-      { new: true, runValidators: true }
-    ).select("-password -__v");
+      { new: true, runValidators: true, select: "-password -__v" }
+    );
 
-    // FIXED: Update profile completion status with correct validation
+    // Update profile completion status
     const profileCompleted = isProfileComplete(updatedUser);
     if (profileCompleted !== updatedUser.profileCompleted) {
       updatedUser.profileCompleted = profileCompleted;
@@ -420,6 +551,189 @@ export const deleteResume = async (req, res) => {
       stack: err.stack,
       userId: req.user?._id,
     });
-    return sendResponse(res, 500, false, "Server error");
+    return sendResponse(res, 500, false, "Server error", null, {
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+  }
+};
+
+// Helper function to upload resume separately
+export const uploadResume = async (req, res) => {
+  try {
+    if (!req.file) {
+      return sendResponse(res, 400, false, "No resume file provided");
+    }
+
+    console.log("Resume upload request:", {
+      userId: req.user._id,
+      file: {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      },
+    });
+
+    // Validate file type and size
+    const allowedTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid file type. Only PDF, DOC, and DOCX files are allowed"
+      );
+    }
+
+    if (req.file.size > 2 * 1024 * 1024) {
+      // 2MB limit
+      return sendResponse(
+        res,
+        400,
+        false,
+        "File size too large. Maximum size is 2MB"
+      );
+    }
+
+    const streamUpload = () =>
+      new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "placify_resumes",
+            resource_type: "raw",
+            format: "pdf",
+          },
+          (error, result) => (result ? resolve(result) : reject(error))
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+
+    const result = await streamUpload();
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { resume: result.secure_url } },
+      { new: true, runValidators: true, select: "-password -__v" }
+    );
+
+    // Update profile completion status
+    const profileCompleted = isProfileComplete(updatedUser);
+    if (profileCompleted !== updatedUser.profileCompleted) {
+      updatedUser.profileCompleted = profileCompleted;
+      await updatedUser.save();
+    }
+
+    console.log("Resume uploaded successfully:", {
+      userId: updatedUser._id,
+      resumeUrl: result.secure_url,
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Resume uploaded successfully",
+      updatedUser
+    );
+  } catch (err) {
+    console.error("Upload Resume Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
+    });
+    return sendResponse(res, 500, false, "Server error", null, {
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+  }
+};
+
+// Helper function to upload profile photo separately
+export const uploadProfilePhoto = async (req, res) => {
+  try {
+    if (!req.file) {
+      return sendResponse(res, 400, false, "No profile photo provided");
+    }
+
+    console.log("Profile photo upload request:", {
+      userId: req.user._id,
+      file: {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      },
+    });
+
+    // Validate file type and size
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif"];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid file type. Only JPEG, PNG, and GIF images are allowed"
+      );
+    }
+
+    if (req.file.size > 5 * 1024 * 1024) {
+      // 5MB limit
+      return sendResponse(
+        res,
+        400,
+        false,
+        "File size too large. Maximum size is 5MB"
+      );
+    }
+
+    const streamUpload = () =>
+      new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "placify_profilePhotos", resource_type: "image" },
+          (error, result) => (result ? resolve(result) : reject(error))
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+
+    const result = await streamUpload();
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { profilePhoto: result.secure_url } },
+      { new: true, runValidators: true, select: "-password -__v" }
+    );
+
+    // Update profile completion status
+    const profileCompleted = isProfileComplete(updatedUser);
+    if (profileCompleted !== updatedUser.profileCompleted) {
+      updatedUser.profileCompleted = profileCompleted;
+      await updatedUser.save();
+    }
+
+    console.log("Profile photo uploaded successfully:", {
+      userId: updatedUser._id,
+      photoUrl: result.secure_url,
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Profile photo uploaded successfully",
+      updatedUser
+    );
+  } catch (err) {
+    console.error("Upload Profile Photo Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
+    });
+    return sendResponse(res, 500, false, "Server error", null, {
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
   }
 };
