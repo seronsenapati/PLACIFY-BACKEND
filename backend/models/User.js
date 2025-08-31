@@ -20,14 +20,13 @@ const socialProfilesSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Define sub-schema for About section
+// Define sub-schema for About section (REMOVED openToRoles)
 const aboutSchema = new mongoose.Schema(
   {
     gender: { type: String, required: true },
     location: { type: String, required: true },
     primaryRole: { type: String, required: true },
     experience: { type: Number, required: true },
-    openToRoles: [{ type: String }],
   },
   { _id: false }
 );

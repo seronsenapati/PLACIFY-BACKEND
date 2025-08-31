@@ -12,13 +12,12 @@ function isProfileComplete(user) {
       about: user.about,
       education: user.education?.length || 0,
       skills: user.skills?.length || 0,
-      openToRoles: user.openToRoles?.length || 0,
       profilePhoto: !!user.profilePhoto,
       resume: !!user.resume,
       socialProfiles: user.socialProfiles,
     });
 
-    // Enhanced validation for required fields
+    // Enhanced validation for required fields (10 fields total - NO openToRoles)
     const requiredFields = {
       name: user.name && user.name.trim().length > 0,
       about:
@@ -37,10 +36,6 @@ function isProfileComplete(user) {
         user.education &&
         Array.isArray(user.education) &&
         user.education.length > 0,
-      openToRoles:
-        user.openToRoles &&
-        Array.isArray(user.openToRoles) &&
-        user.openToRoles.length > 0,
       profilePhoto: user.profilePhoto && user.profilePhoto.trim().length > 0,
       resume: user.resume && user.resume.trim().length > 0,
     };
@@ -150,42 +145,6 @@ function validateSkills(skills) {
     .slice(0, 50); // Limit number of skills
 }
 
-// Validate and sanitize openToRoles array - Always return array as per memory requirements
-function validateOpenToRoles(openToRoles) {
-  if (!Array.isArray(openToRoles)) {
-    console.log("OpenToRoles validation: Not an array, returning empty array");
-    return [];
-  }
-
-  console.log("Validating openToRoles data:", openToRoles);
-
-  const validated = openToRoles
-    .map((role) => {
-      const cleaned = typeof role === "string" ? role.trim() : "";
-      if (role !== cleaned) {
-        console.log("Cleaned role:", { original: role, cleaned });
-      }
-      return cleaned;
-    })
-    .filter((role) => {
-      const isValid = role && role.length > 0 && role.length <= 100;
-      if (!isValid && role) {
-        console.log("Filtering out invalid role:", role);
-      }
-      return isValid;
-    })
-    .slice(0, 20); // Limit number of roles
-
-  console.log("OpenToRoles validation complete:", {
-    original: openToRoles.length,
-    validated: validated.length,
-    result: validated,
-  });
-
-  // CRITICAL: Never return undefined or null, always return array
-  return validated || [];
-}
-
 // Validate and sanitize social profiles
 function validateSocialProfiles(socialProfiles) {
   if (!socialProfiles || typeof socialProfiles !== "object") return {};
@@ -272,7 +231,6 @@ export const getProfile = async (req, res) => {
       profileCompleted: user.profileCompleted,
       hasEducation: user.education?.length || 0,
       hasSkills: user.skills?.length || 0,
-      hasOpenToRoles: user.openToRoles?.length || 0,
     });
 
     return sendResponse(res, 200, true, "Profile fetched", user);
@@ -359,14 +317,8 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    // Parse JSON fields if sent as strings
-    const jsonFields = [
-      "skills",
-      "education",
-      "socialProfiles",
-      "about",
-      "openToRoles",
-    ];
+    // Parse JSON fields if sent as strings (REMOVED openToRoles from parsing)
+    const jsonFields = ["skills", "education", "socialProfiles", "about"];
 
     for (const field of jsonFields) {
       if (updateData[field] && typeof updateData[field] === "string") {
@@ -396,6 +348,12 @@ export const updateProfile = async (req, res) => {
       delete updateData.experience;
     }
 
+    // REMOVE any openToRoles data if it accidentally gets sent
+    if (updateData.openToRoles) {
+      console.log("Removing openToRoles data as it's no longer supported");
+      delete updateData.openToRoles;
+    }
+
     // Validate and clean data according to memory requirements
     if (updateData.about) {
       updateData.about = validateAbout(updateData.about);
@@ -416,15 +374,6 @@ export const updateProfile = async (req, res) => {
         original: req.body.skills,
         cleaned: updateData.skills,
         count: updateData.skills.length,
-      });
-    }
-
-    if (updateData.openToRoles !== undefined) {
-      updateData.openToRoles = validateOpenToRoles(updateData.openToRoles);
-      console.log("OpenToRoles validation result:", {
-        original: req.body.openToRoles,
-        cleaned: updateData.openToRoles,
-        count: updateData.openToRoles.length,
       });
     }
 
@@ -463,16 +412,9 @@ export const updateProfile = async (req, res) => {
       }
     }
 
-    // Clean data payload by removing empty values as per memory requirements
-    // But always keep openToRoles even if empty as per memory specification
+    // Clean data payload by removing empty values (SIMPLIFIED - no openToRoles handling)
     const originalUpdateData = { ...updateData };
     Object.keys(updateData).forEach((key) => {
-      if (key === "openToRoles") {
-        // CRITICAL: Always send openToRoles, even if empty array (memory requirement)
-        console.log("Preserving openToRoles:", updateData.openToRoles);
-        return;
-      }
-
       const value = updateData[key];
       if (
         value === "" ||
@@ -488,12 +430,6 @@ export const updateProfile = async (req, res) => {
       }
     });
 
-    // DOUBLE CHECK: Ensure openToRoles is still present
-    if (originalUpdateData.openToRoles && !updateData.openToRoles) {
-      console.log("CRITICAL: Restoring accidentally removed openToRoles");
-      updateData.openToRoles = originalUpdateData.openToRoles;
-    }
-
     console.log("Data cleaning summary:", {
       originalFields: Object.keys(originalUpdateData),
       cleanedFields: Object.keys(updateData),
@@ -507,8 +443,6 @@ export const updateProfile = async (req, res) => {
       hasAbout: !!updateData.about,
       educationCount: updateData.education?.length || 0,
       skillsCount: updateData.skills?.length || 0,
-      openToRolesCount: updateData.openToRoles?.length || 0,
-      openToRolesData: updateData.openToRoles,
       socialProfilesKeys: updateData.socialProfiles
         ? Object.keys(updateData.socialProfiles)
         : [],
@@ -516,17 +450,6 @@ export const updateProfile = async (req, res) => {
       hasResume: !!updateData.resume,
       completePayload: JSON.stringify(updateData, null, 2),
     });
-
-    // CRITICAL: Ensure openToRoles is not nested under 'about'
-    if (updateData.about && updateData.about.openToRoles) {
-      console.log(
-        "WARNING: Found openToRoles nested under 'about', moving to top level"
-      );
-      if (!updateData.openToRoles) {
-        updateData.openToRoles = updateData.about.openToRoles;
-      }
-      delete updateData.about.openToRoles;
-    }
 
     // Update user in database
     const updatedUser = await User.findByIdAndUpdate(
@@ -548,8 +471,6 @@ export const updateProfile = async (req, res) => {
       userId: updatedUser._id,
       name: updatedUser.name,
       aboutKeys: updatedUser.about ? Object.keys(updatedUser.about) : [],
-      openToRolesTopLevel: updatedUser.openToRoles?.length || 0,
-      openToRolesInAbout: updatedUser.about?.openToRoles?.length || 0,
       skillsCount: updatedUser.skills?.length || 0,
       educationCount: updatedUser.education?.length || 0,
       socialProfilesKeys: updatedUser.socialProfiles
@@ -558,14 +479,6 @@ export const updateProfile = async (req, res) => {
       hasResume: !!updatedUser.resume,
       hasProfilePhoto: !!updatedUser.profilePhoto,
     });
-
-    // CRITICAL: Fix data structure if openToRoles is in wrong place
-    if (!updatedUser.openToRoles && updatedUser.about?.openToRoles) {
-      console.log("FIXING: Moving openToRoles from about to top level");
-      updatedUser.openToRoles = updatedUser.about.openToRoles;
-      updatedUser.about.openToRoles = undefined;
-      await updatedUser.save();
-    }
 
     // Update profile completion status
     const profileCompleted = isProfileComplete(updatedUser);
@@ -602,7 +515,6 @@ export const updateProfile = async (req, res) => {
             hasAbout: !!updateData.about,
             hasEducation: !!updateData.education,
             hasSkills: !!updateData.skills,
-            hasOpenToRoles: !!updateData.openToRoles,
             hasSocialProfiles: !!updateData.socialProfiles,
           }
         : null,
