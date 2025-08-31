@@ -182,7 +182,8 @@ function validateOpenToRoles(openToRoles) {
     result: validated,
   });
 
-  return validated;
+  // CRITICAL: Never return undefined or null, always return array
+  return validated || [];
 }
 
 // Validate and sanitize social profiles
@@ -467,7 +468,8 @@ export const updateProfile = async (req, res) => {
     const originalUpdateData = { ...updateData };
     Object.keys(updateData).forEach((key) => {
       if (key === "openToRoles") {
-        // Always send openToRoles, even if empty array (memory requirement)
+        // CRITICAL: Always send openToRoles, even if empty array (memory requirement)
+        console.log("Preserving openToRoles:", updateData.openToRoles);
         return;
       }
 
@@ -486,6 +488,12 @@ export const updateProfile = async (req, res) => {
       }
     });
 
+    // DOUBLE CHECK: Ensure openToRoles is still present
+    if (originalUpdateData.openToRoles && !updateData.openToRoles) {
+      console.log("CRITICAL: Restoring accidentally removed openToRoles");
+      updateData.openToRoles = originalUpdateData.openToRoles;
+    }
+
     console.log("Data cleaning summary:", {
       originalFields: Object.keys(originalUpdateData),
       cleanedFields: Object.keys(updateData),
@@ -494,19 +502,31 @@ export const updateProfile = async (req, res) => {
       ),
     });
 
-    console.log("Cleaned update data:", {
+    console.log("Final update data before database save:", {
       hasName: !!updateData.name,
       hasAbout: !!updateData.about,
       educationCount: updateData.education?.length || 0,
       skillsCount: updateData.skills?.length || 0,
       openToRolesCount: updateData.openToRoles?.length || 0,
+      openToRolesData: updateData.openToRoles,
       socialProfilesKeys: updateData.socialProfiles
         ? Object.keys(updateData.socialProfiles)
         : [],
       hasProfilePhoto: !!updateData.profilePhoto,
       hasResume: !!updateData.resume,
-      finalPayload: updateData,
+      completePayload: JSON.stringify(updateData, null, 2),
     });
+
+    // CRITICAL: Ensure openToRoles is not nested under 'about'
+    if (updateData.about && updateData.about.openToRoles) {
+      console.log(
+        "WARNING: Found openToRoles nested under 'about', moving to top level"
+      );
+      if (!updateData.openToRoles) {
+        updateData.openToRoles = updateData.about.openToRoles;
+      }
+      delete updateData.about.openToRoles;
+    }
 
     // Update user in database
     const updatedUser = await User.findByIdAndUpdate(
@@ -521,6 +541,30 @@ export const updateProfile = async (req, res) => {
 
     if (!updatedUser) {
       return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Log the actual data structure after database update
+    console.log("User data after database update:", {
+      userId: updatedUser._id,
+      name: updatedUser.name,
+      aboutKeys: updatedUser.about ? Object.keys(updatedUser.about) : [],
+      openToRolesTopLevel: updatedUser.openToRoles?.length || 0,
+      openToRolesInAbout: updatedUser.about?.openToRoles?.length || 0,
+      skillsCount: updatedUser.skills?.length || 0,
+      educationCount: updatedUser.education?.length || 0,
+      socialProfilesKeys: updatedUser.socialProfiles
+        ? Object.keys(updatedUser.socialProfiles)
+        : [],
+      hasResume: !!updatedUser.resume,
+      hasProfilePhoto: !!updatedUser.profilePhoto,
+    });
+
+    // CRITICAL: Fix data structure if openToRoles is in wrong place
+    if (!updatedUser.openToRoles && updatedUser.about?.openToRoles) {
+      console.log("FIXING: Moving openToRoles from about to top level");
+      updatedUser.openToRoles = updatedUser.about.openToRoles;
+      updatedUser.about.openToRoles = undefined;
+      await updatedUser.save();
     }
 
     // Update profile completion status
