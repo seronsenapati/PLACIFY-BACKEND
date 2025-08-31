@@ -6,6 +6,18 @@ import sendResponse from "../utils/sendResponse.js";
 
 function isProfileComplete(user) {
   try {
+    console.log("Profile completion validation for user:", {
+      userId: user._id,
+      name: user.name,
+      about: user.about,
+      education: user.education?.length || 0,
+      skills: user.skills?.length || 0,
+      openToRoles: user.openToRoles?.length || 0,
+      profilePhoto: !!user.profilePhoto,
+      resume: !!user.resume,
+      socialProfiles: user.socialProfiles,
+    });
+
     // Enhanced validation for required fields
     const requiredFields = {
       name: user.name && user.name.trim().length > 0,
@@ -41,10 +53,13 @@ function isProfileComplete(user) {
     requiredFields.socialProfiles = hasAtLeastOneSocialLink;
 
     // Log validation details for debugging
-    console.log("Profile completion validation:", {
+    console.log("Profile completion validation results:", {
       userId: user._id,
       requiredFields,
-      isComplete: Object.values(requiredFields).every(Boolean),
+      allFieldsComplete: Object.values(requiredFields).every(Boolean),
+      missingFields: Object.keys(requiredFields).filter(
+        (key) => !requiredFields[key]
+      ),
     });
 
     return Object.values(requiredFields).every(Boolean);
@@ -54,15 +69,25 @@ function isProfileComplete(user) {
   }
 }
 
-// Validate and sanitize education data
+// Validate education data - Use 'school' field as per memory requirements
 function validateEducation(education) {
-  if (!Array.isArray(education)) return [];
+  if (!Array.isArray(education)) {
+    console.log("Education validation: Not an array, returning empty array");
+    return [];
+  }
 
-  return education
-    .filter((edu) => edu && typeof edu === "object")
+  console.log("Validating education data:", education);
+
+  const validated = education
+    .filter((edu) => {
+      const isValid = edu && typeof edu === "object";
+      if (!isValid) console.log("Filtering out invalid education entry:", edu);
+      return isValid;
+    })
     .map((edu) => {
       const cleaned = {
         degree: typeof edu.degree === "string" ? edu.degree.trim() : "",
+        // Use 'school' field consistently as per memory requirements
         school:
           typeof edu.school === "string"
             ? edu.school.trim()
@@ -73,23 +98,46 @@ function validateEducation(education) {
         toYear: edu.toYear ? parseInt(edu.toYear) : null,
       };
 
+      // Validate parsed fromYear is not NaN as per memory requirements
+      if (isNaN(cleaned.fromYear)) {
+        cleaned.fromYear = 0;
+      }
+
+      // Validate parsed toYear is not NaN as per memory requirements
+      if (cleaned.toYear && isNaN(cleaned.toYear)) {
+        cleaned.toYear = null;
+      }
+
       // Additional validation
       if (cleaned.toYear && cleaned.toYear < cleaned.fromYear) {
+        console.log("Invalid toYear detected, resetting:", cleaned);
         cleaned.toYear = null; // Reset invalid toYear
       }
 
       return cleaned;
     })
-    .filter(
-      (edu) =>
+    .filter((edu) => {
+      const isValid =
         edu.degree &&
         edu.degree.length > 0 &&
         edu.school &&
         edu.school.length > 0 &&
         edu.fromYear &&
         edu.fromYear >= 1950 &&
-        edu.fromYear <= new Date().getFullYear() + 5
-    );
+        edu.fromYear <= new Date().getFullYear() + 5;
+      if (!isValid) {
+        console.log("Filtering out invalid education after cleaning:", edu);
+      }
+      return isValid;
+    });
+
+  console.log("Education validation complete:", {
+    original: education.length,
+    validated: validated.length,
+    result: validated,
+  });
+
+  return validated;
 }
 
 // Validate and sanitize skills array
@@ -102,14 +150,39 @@ function validateSkills(skills) {
     .slice(0, 50); // Limit number of skills
 }
 
-// Validate and sanitize openToRoles array
+// Validate and sanitize openToRoles array - Always return array as per memory requirements
 function validateOpenToRoles(openToRoles) {
-  if (!Array.isArray(openToRoles)) return [];
+  if (!Array.isArray(openToRoles)) {
+    console.log("OpenToRoles validation: Not an array, returning empty array");
+    return [];
+  }
 
-  return openToRoles
-    .map((role) => (typeof role === "string" ? role.trim() : ""))
-    .filter((role) => role && role.length > 0 && role.length <= 100) // Limit role length
+  console.log("Validating openToRoles data:", openToRoles);
+
+  const validated = openToRoles
+    .map((role) => {
+      const cleaned = typeof role === "string" ? role.trim() : "";
+      if (role !== cleaned) {
+        console.log("Cleaned role:", { original: role, cleaned });
+      }
+      return cleaned;
+    })
+    .filter((role) => {
+      const isValid = role && role.length > 0 && role.length <= 100;
+      if (!isValid && role) {
+        console.log("Filtering out invalid role:", role);
+      }
+      return isValid;
+    })
     .slice(0, 20); // Limit number of roles
+
+  console.log("OpenToRoles validation complete:", {
+    original: openToRoles.length,
+    validated: validated.length,
+    result: validated,
+  });
+
+  return validated;
 }
 
 // Validate and sanitize social profiles
@@ -215,7 +288,7 @@ export const getProfile = async (req, res) => {
   }
 };
 
-// UPDATE Profile
+// UPDATE Profile (for non-file data only, files handled by separate endpoints)
 export const updateProfile = async (req, res) => {
   let updateData = null;
 
@@ -228,9 +301,12 @@ export const updateProfile = async (req, res) => {
       hasFile: !!req.file,
       fileType: req.file?.fieldname,
       bodySize: JSON.stringify(req.body).length,
+      isFileUpload: req.headers["content-type"]?.includes(
+        "multipart/form-data"
+      ),
     });
 
-    // Handle file uploads
+    // Handle file uploads (for legacy support or when files come through main endpoint)
     if (req.file) {
       try {
         console.log("Processing file upload:", {
@@ -319,27 +395,47 @@ export const updateProfile = async (req, res) => {
       delete updateData.experience;
     }
 
-    // Validate and clean data
+    // Validate and clean data according to memory requirements
     if (updateData.about) {
       updateData.about = validateAbout(updateData.about);
     }
 
     if (updateData.education !== undefined) {
       updateData.education = validateEducation(updateData.education);
+      console.log("Education validation result:", {
+        original: req.body.education,
+        cleaned: updateData.education,
+        count: updateData.education.length,
+      });
     }
 
     if (updateData.skills !== undefined) {
       updateData.skills = validateSkills(updateData.skills);
+      console.log("Skills validation result:", {
+        original: req.body.skills,
+        cleaned: updateData.skills,
+        count: updateData.skills.length,
+      });
     }
 
     if (updateData.openToRoles !== undefined) {
       updateData.openToRoles = validateOpenToRoles(updateData.openToRoles);
+      console.log("OpenToRoles validation result:", {
+        original: req.body.openToRoles,
+        cleaned: updateData.openToRoles,
+        count: updateData.openToRoles.length,
+      });
     }
 
     if (updateData.socialProfiles !== undefined) {
       updateData.socialProfiles = validateSocialProfiles(
         updateData.socialProfiles
       );
+      console.log("Social profiles validation result:", {
+        original: req.body.socialProfiles,
+        cleaned: updateData.socialProfiles,
+        keys: Object.keys(updateData.socialProfiles),
+      });
     }
 
     // Additional validation for name
@@ -366,6 +462,38 @@ export const updateProfile = async (req, res) => {
       }
     }
 
+    // Clean data payload by removing empty values as per memory requirements
+    // But always keep openToRoles even if empty as per memory specification
+    const originalUpdateData = { ...updateData };
+    Object.keys(updateData).forEach((key) => {
+      if (key === "openToRoles") {
+        // Always send openToRoles, even if empty array (memory requirement)
+        return;
+      }
+
+      const value = updateData[key];
+      if (
+        value === "" ||
+        value === null ||
+        value === undefined ||
+        (Array.isArray(value) && value.length === 0) ||
+        (typeof value === "object" &&
+          value !== null &&
+          Object.keys(value).length === 0)
+      ) {
+        console.log(`Removing empty field '${key}':`, value);
+        delete updateData[key];
+      }
+    });
+
+    console.log("Data cleaning summary:", {
+      originalFields: Object.keys(originalUpdateData),
+      cleanedFields: Object.keys(updateData),
+      removedFields: Object.keys(originalUpdateData).filter(
+        (key) => !Object.keys(updateData).includes(key)
+      ),
+    });
+
     console.log("Cleaned update data:", {
       hasName: !!updateData.name,
       hasAbout: !!updateData.about,
@@ -377,6 +505,7 @@ export const updateProfile = async (req, res) => {
         : [],
       hasProfilePhoto: !!updateData.profilePhoto,
       hasResume: !!updateData.resume,
+      finalPayload: updateData,
     });
 
     // Update user in database
@@ -547,186 +676,6 @@ export const deleteResume = async (req, res) => {
     );
   } catch (err) {
     console.error("Delete Resume Error:", {
-      message: err.message,
-      stack: err.stack,
-      userId: req.user?._id,
-    });
-    return sendResponse(res, 500, false, "Server error", null, {
-      error: err.message,
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-    });
-  }
-};
-
-// Helper function to upload resume separately
-export const uploadResume = async (req, res) => {
-  try {
-    if (!req.file) {
-      return sendResponse(res, 400, false, "No resume file provided");
-    }
-
-    console.log("Resume upload request:", {
-      userId: req.user._id,
-      file: {
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-      },
-    });
-
-    // Validate file type and size
-    const allowedTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        "Invalid file type. Only PDF, DOC, and DOCX files are allowed"
-      );
-    }
-
-    if (req.file.size > 2 * 1024 * 1024) {
-      // 2MB limit
-      return sendResponse(
-        res,
-        400,
-        false,
-        "File size too large. Maximum size is 2MB"
-      );
-    }
-
-    const streamUpload = () =>
-      new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "placify_resumes",
-            resource_type: "raw",
-            format: "pdf",
-          },
-          (error, result) => (result ? resolve(result) : reject(error))
-        );
-        streamifier.createReadStream(req.file.buffer).pipe(stream);
-      });
-
-    const result = await streamUpload();
-
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user._id,
-      { $set: { resume: result.secure_url } },
-      { new: true, runValidators: true, select: "-password -__v" }
-    );
-
-    // Update profile completion status
-    const profileCompleted = isProfileComplete(updatedUser);
-    if (profileCompleted !== updatedUser.profileCompleted) {
-      updatedUser.profileCompleted = profileCompleted;
-      await updatedUser.save();
-    }
-
-    console.log("Resume uploaded successfully:", {
-      userId: updatedUser._id,
-      resumeUrl: result.secure_url,
-    });
-
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Resume uploaded successfully",
-      updatedUser
-    );
-  } catch (err) {
-    console.error("Upload Resume Error:", {
-      message: err.message,
-      stack: err.stack,
-      userId: req.user?._id,
-    });
-    return sendResponse(res, 500, false, "Server error", null, {
-      error: err.message,
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-    });
-  }
-};
-
-// Helper function to upload profile photo separately
-export const uploadProfilePhoto = async (req, res) => {
-  try {
-    if (!req.file) {
-      return sendResponse(res, 400, false, "No profile photo provided");
-    }
-
-    console.log("Profile photo upload request:", {
-      userId: req.user._id,
-      file: {
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-      },
-    });
-
-    // Validate file type and size
-    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif"];
-    if (!allowedTypes.includes(req.file.mimetype)) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        "Invalid file type. Only JPEG, PNG, and GIF images are allowed"
-      );
-    }
-
-    if (req.file.size > 5 * 1024 * 1024) {
-      // 5MB limit
-      return sendResponse(
-        res,
-        400,
-        false,
-        "File size too large. Maximum size is 5MB"
-      );
-    }
-
-    const streamUpload = () =>
-      new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "placify_profilePhotos", resource_type: "image" },
-          (error, result) => (result ? resolve(result) : reject(error))
-        );
-        streamifier.createReadStream(req.file.buffer).pipe(stream);
-      });
-
-    const result = await streamUpload();
-
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user._id,
-      { $set: { profilePhoto: result.secure_url } },
-      { new: true, runValidators: true, select: "-password -__v" }
-    );
-
-    // Update profile completion status
-    const profileCompleted = isProfileComplete(updatedUser);
-    if (profileCompleted !== updatedUser.profileCompleted) {
-      updatedUser.profileCompleted = profileCompleted;
-      await updatedUser.save();
-    }
-
-    console.log("Profile photo uploaded successfully:", {
-      userId: updatedUser._id,
-      photoUrl: result.secure_url,
-    });
-
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Profile photo uploaded successfully",
-      updatedUser
-    );
-  } catch (err) {
-    console.error("Upload Profile Photo Error:", {
       message: err.message,
       stack: err.stack,
       userId: req.user?._id,
