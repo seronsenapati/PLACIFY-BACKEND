@@ -5,6 +5,12 @@ import Company from "../models/Company.js";
 import sendResponse from "../utils/sendResponse.js";
 
 function isProfileComplete(user) {
+  // Check for social links - must have at least one non-empty social link
+  const socialLinks = user.socialProfiles || {};
+  const hasAtLeastOneSocialLink = Object.values(socialLinks).some(
+    (link) => link && link.trim() && link.trim().length > 0
+  );
+
   return (
     user.name &&
     user.about &&
@@ -12,10 +18,15 @@ function isProfileComplete(user) {
     user.about.location &&
     user.about.primaryRole &&
     user.about.experience !== undefined && // Check if experience exists
+    user.skills &&
     user.skills.length > 0 &&
+    user.education &&
     user.education.length > 0 &&
+    user.openToRoles &&
+    user.openToRoles.length > 0 && // FIXED: Added openToRoles check
     user.profilePhoto &&
-    user.resume
+    user.resume &&
+    hasAtLeastOneSocialLink // FIXED: Added social links check
   );
 }
 
@@ -133,13 +144,13 @@ export const updateProfile = async (req, res) => {
       return true;
     };
 
-    // Parse all JSON fields
+    // Parse all JSON fields - FIXED: Ensure openToRoles is properly parsed
     const fieldsToParse = [
       "skills",
       "education",
       "socialProfiles",
       "about",
-      "openToRoles",
+      "openToRoles", // FIXED: Ensure this is included in parsing
     ];
     for (const field of fieldsToParse) {
       if (!parseField(field)) {
@@ -161,7 +172,74 @@ export const updateProfile = async (req, res) => {
       delete updateData.experience;
     }
 
-    // Validate required fields
+    // FIXED: Validate and clean openToRoles data
+    if (updateData.openToRoles) {
+      if (Array.isArray(updateData.openToRoles)) {
+        // Clean and filter openToRoles
+        updateData.openToRoles = updateData.openToRoles
+          .map((role) => (typeof role === "string" ? role.trim() : ""))
+          .filter((role) => role && role.length > 0);
+      } else {
+        // If it's not an array, set it to empty array
+        updateData.openToRoles = [];
+      }
+    } else {
+      // Ensure openToRoles exists as an array
+      updateData.openToRoles = [];
+    }
+
+    // FIXED: Validate and clean skills data
+    if (updateData.skills) {
+      if (Array.isArray(updateData.skills)) {
+        updateData.skills = updateData.skills
+          .map((skill) => (typeof skill === "string" ? skill.trim() : ""))
+          .filter((skill) => skill && skill.length > 0);
+      } else {
+        updateData.skills = [];
+      }
+    }
+
+    // FIXED: Validate and clean education data
+    if (updateData.education) {
+      if (Array.isArray(updateData.education)) {
+        updateData.education = updateData.education
+          .filter((edu) => edu && typeof edu === "object")
+          .map((edu) => ({
+            degree: edu.degree ? edu.degree.trim() : "",
+            school: edu.school ? edu.school.trim() : "", // Backend uses 'school' field
+            fromYear: parseInt(edu.fromYear) || 0,
+            toYear: edu.toYear ? parseInt(edu.toYear) : null,
+          }))
+          .filter((edu) => edu.degree && edu.school && edu.fromYear);
+      } else {
+        updateData.education = [];
+      }
+    }
+
+    // FIXED: Validate and clean socialProfiles data
+    if (
+      updateData.socialProfiles &&
+      typeof updateData.socialProfiles === "object"
+    ) {
+      const cleanedSocialProfiles = {};
+      const allowedFields = ["linkedin", "github", "x", "instagram", "website"];
+
+      allowedFields.forEach((field) => {
+        if (
+          updateData.socialProfiles[field] &&
+          typeof updateData.socialProfiles[field] === "string"
+        ) {
+          const cleanedValue = updateData.socialProfiles[field].trim();
+          if (cleanedValue) {
+            cleanedSocialProfiles[field] = cleanedValue;
+          }
+        }
+      });
+
+      updateData.socialProfiles = cleanedSocialProfiles;
+    }
+
+    // Validate required fields in about object
     if (updateData.about) {
       const requiredFields = [
         "gender",
@@ -184,9 +262,33 @@ export const updateProfile = async (req, res) => {
           `Missing required fields in about: ${missingFields.join(", ")}`
         );
       }
+
+      // FIXED: Validate experience is a valid number
+      if (updateData.about.experience !== undefined) {
+        const expValue = parseInt(updateData.about.experience);
+        if (isNaN(expValue) || expValue < 0) {
+          return sendResponse(
+            res,
+            400,
+            false,
+            "Experience must be a valid number (0 or greater)"
+          );
+        }
+        updateData.about.experience = expValue;
+      }
     }
 
-    console.log("Cleaned update data being sent to database:", updateData);
+    console.log("Cleaned update data being sent to database:", {
+      ...updateData,
+      openToRolesLength: updateData.openToRoles
+        ? updateData.openToRoles.length
+        : 0,
+      skillsLength: updateData.skills ? updateData.skills.length : 0,
+      educationLength: updateData.education ? updateData.education.length : 0,
+      socialProfilesKeys: updateData.socialProfiles
+        ? Object.keys(updateData.socialProfiles)
+        : [],
+    });
 
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
@@ -198,7 +300,7 @@ export const updateProfile = async (req, res) => {
       return sendResponse(res, 404, false, "User not found");
     }
 
-    // Update profile completion status
+    // FIXED: Update profile completion status with correct validation
     const profileCompleted = isProfileComplete(updatedUser);
     if (profileCompleted !== updatedUser.profileCompleted) {
       updatedUser.profileCompleted = profileCompleted;
@@ -208,6 +310,14 @@ export const updateProfile = async (req, res) => {
     console.log("Profile updated successfully:", {
       userId: updatedUser._id,
       profileCompleted: updatedUser.profileCompleted,
+      openToRolesCount: updatedUser.openToRoles
+        ? updatedUser.openToRoles.length
+        : 0,
+      skillsCount: updatedUser.skills ? updatedUser.skills.length : 0,
+      educationCount: updatedUser.education ? updatedUser.education.length : 0,
+      socialProfilesCount: updatedUser.socialProfiles
+        ? Object.keys(updatedUser.socialProfiles).length
+        : 0,
     });
 
     return sendResponse(res, 200, true, "Profile updated", updatedUser);
@@ -285,7 +395,7 @@ export const deleteResume = async (req, res) => {
       { new: true, runValidators: true }
     ).select("-password -__v");
 
-    // Update profile completion status
+    // FIXED: Update profile completion status with correct validation
     const profileCompleted = isProfileComplete(updatedUser);
     if (profileCompleted !== updatedUser.profileCompleted) {
       updatedUser.profileCompleted = profileCompleted;
