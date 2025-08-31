@@ -51,9 +51,23 @@ export const updateProfile = async (req, res) => {
   try {
     let updateData = { ...req.body };
 
+    console.log("Update Profile Request:", {
+      userId: req.user._id,
+      body: req.body,
+      file: req.file
+        ? {
+            fieldname: req.file.fieldname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            originalname: req.file.originalname,
+          }
+        : null,
+    });
+
     // Handle profile photo upload
     if (req.file && req.file.fieldname === "profilePhoto") {
       try {
+        console.log("Uploading profile photo to Cloudinary...");
         const streamUpload = () =>
           new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
@@ -65,8 +79,13 @@ export const updateProfile = async (req, res) => {
 
         const result = await streamUpload();
         updateData.profilePhoto = result.secure_url;
+        console.log("Profile photo uploaded successfully:", result.secure_url);
       } catch (uploadError) {
-        console.error("Profile photo upload error:", uploadError);
+        console.error("Profile photo upload error:", {
+          error: uploadError,
+          message: uploadError.message,
+          stack: uploadError.stack,
+        });
         return sendResponse(res, 400, false, "Error uploading profile photo");
       }
     }
@@ -74,6 +93,7 @@ export const updateProfile = async (req, res) => {
     // Handle resume upload
     if (req.file && req.file.fieldname === "resume") {
       try {
+        console.log("Uploading resume to Cloudinary...");
         const streamUpload = () =>
           new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
@@ -89,8 +109,13 @@ export const updateProfile = async (req, res) => {
 
         const result = await streamUpload();
         updateData.resume = result.secure_url;
+        console.log("Resume uploaded successfully:", result.secure_url);
       } catch (uploadError) {
-        console.error("Resume upload error:", uploadError);
+        console.error("Resume upload error:", {
+          error: uploadError,
+          message: uploadError.message,
+          stack: uploadError.stack,
+        });
         return sendResponse(res, 400, false, "Error uploading resume");
       }
     }
@@ -161,6 +186,8 @@ export const updateProfile = async (req, res) => {
       }
     }
 
+    console.log("Cleaned update data being sent to database:", updateData);
+
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },
@@ -178,6 +205,11 @@ export const updateProfile = async (req, res) => {
       await updatedUser.save();
     }
 
+    console.log("Profile updated successfully:", {
+      userId: updatedUser._id,
+      profileCompleted: updatedUser.profileCompleted,
+    });
+
     return sendResponse(res, 200, true, "Profile updated", updatedUser);
   } catch (err) {
     console.error("Update Profile Error:", {
@@ -191,6 +223,92 @@ export const updateProfile = async (req, res) => {
             size: req.file.size,
           }
         : null,
+    });
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// DELETE Resume
+export const deleteResume = async (req, res) => {
+  try {
+    console.log("Delete resume request:", {
+      userId: req.user._id,
+      timestamp: new Date().toISOString(),
+    });
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Check if user has a resume
+    if (!user.resume) {
+      return sendResponse(res, 400, false, "No resume found to delete");
+    }
+
+    const oldResumeUrl = user.resume;
+    console.log("Deleting resume:", oldResumeUrl);
+
+    // Extract public_id from Cloudinary URL for deletion
+    if (oldResumeUrl && oldResumeUrl.includes("cloudinary.com")) {
+      try {
+        // Extract public_id from URL (format: .../placify_resumes/filename.pdf)
+        const urlParts = oldResumeUrl.split("/");
+        const filename = urlParts[urlParts.length - 1];
+        const publicId = `placify_resumes/${filename.split(".")[0]}`;
+
+        console.log(
+          "Attempting to delete from Cloudinary with public_id:",
+          publicId
+        );
+
+        // Delete from Cloudinary
+        const cloudinaryResult = await cloudinary.uploader.destroy(publicId, {
+          resource_type: "raw",
+        });
+
+        console.log("Cloudinary deletion result:", cloudinaryResult);
+      } catch (cloudinaryError) {
+        console.error("Error deleting from Cloudinary:", {
+          error: cloudinaryError,
+          message: cloudinaryError.message,
+          publicId: oldResumeUrl,
+        });
+        // Continue with database update even if Cloudinary deletion fails
+      }
+    }
+
+    // Remove resume from user profile
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $unset: { resume: 1 } },
+      { new: true, runValidators: true }
+    ).select("-password -__v");
+
+    // Update profile completion status
+    const profileCompleted = isProfileComplete(updatedUser);
+    if (profileCompleted !== updatedUser.profileCompleted) {
+      updatedUser.profileCompleted = profileCompleted;
+      await updatedUser.save();
+    }
+
+    console.log("Resume deleted successfully:", {
+      userId: updatedUser._id,
+      profileCompleted: updatedUser.profileCompleted,
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Resume deleted successfully",
+      updatedUser
+    );
+  } catch (err) {
+    console.error("Delete Resume Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
     });
     return sendResponse(res, 500, false, "Server error");
   }

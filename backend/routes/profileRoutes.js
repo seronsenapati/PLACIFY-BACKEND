@@ -1,6 +1,10 @@
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
-import { getProfile, updateProfile } from "../controllers/profileController.js";
+import {
+  getProfile,
+  updateProfile,
+  deleteResume,
+} from "../controllers/profileController.js";
 import uploadProfilePhoto from "../controllers/uploadProfilePhoto.js";
 import uploadResume from "../controllers/resumeUploadController.js";
 
@@ -16,6 +20,11 @@ router.patch(
   (req, res, next) => {
     uploadProfilePhoto.single("profilePhoto")(req, res, (err) => {
       if (err) {
+        console.error("Profile photo upload middleware error:", {
+          error: err,
+          message: err.message,
+          stack: err.stack,
+        });
         return res.status(400).json({
           success: false,
           message: err.message || "Error uploading profile photo",
@@ -36,6 +45,11 @@ router.patch(
   (req, res, next) => {
     uploadResume.single("resume")(req, res, (err) => {
       if (err) {
+        console.error("Resume upload middleware error:", {
+          error: err,
+          message: err.message,
+          stack: err.stack,
+        });
         return res.status(400).json({
           success: false,
           message: err.message || "Error uploading resume",
@@ -48,6 +62,9 @@ router.patch(
   },
   updateProfile
 );
+
+// Delete resume
+router.delete("/resume", protect, deleteResume);
 
 // Update profile data (non-file fields)
 router.patch(
