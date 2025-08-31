@@ -5,7 +5,7 @@ const educationSchema = new mongoose.Schema({
   school: { type: String, required: true },
   degree: { type: String, required: true },
   fromYear: { type: Number, required: true },
-  toYear: { type: Number, required: true },
+  toYear: { type: Number},
 });
 
 // Define sub-schema for Social Profiles
