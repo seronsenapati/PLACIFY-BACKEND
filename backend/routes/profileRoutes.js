@@ -13,7 +13,7 @@ const router = express.Router();
 // Get user profile
 router.get("/", protect, getProfile);
 
-// Update profile photo
+// Update profile photo - uses your existing uploadProfilePhoto controller
 router.patch(
   "/photo",
   protect,
@@ -35,10 +35,10 @@ router.patch(
       next();
     });
   },
-  updateProfile
+  updateProfile // Uses main updateProfile function
 );
 
-// Update resume
+// Update resume - uses your existing uploadResume controller
 router.patch(
   "/resume",
   protect,
@@ -60,7 +60,7 @@ router.patch(
       next();
     });
   },
-  updateProfile
+  updateProfile // Uses main updateProfile function
 );
 
 // Delete resume
