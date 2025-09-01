@@ -1,33 +1,109 @@
-import Notification from "../models/Notification.js";
+import Notification, { NOTIFICATION_TYPES, NOTIFICATION_PRIORITIES } from "../models/Notification.js";
 import sendResponse from "../utils/sendResponse.js";
+import { 
+  getNotificationStats,
+  markNotificationsAsRead,
+  deleteNotificationsByCriteria,
+  isValidNotificationType,
+  isValidNotificationPriority
+} from "../utils/notificationHelpers.js";
+import mongoose from 'mongoose';
 
-// GET /api/notifications
+// GET /api/notifications - Enhanced with pagination, filtering, and search
 export const getNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Improved: safer limit parsing
-    const rawLimit = parseInt(req.query.limit);
-    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? rawLimit : 20;
+    // Parse query parameters
+    const {
+      page = 1,
+      limit = 20,
+      unread,
+      type,
+      priority,
+      search,
+      startDate,
+      endDate
+    } = req.query;
 
-    const unreadOnly = req.query.unread === "true";
+    // Validate and sanitize parameters
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
-    const filter = { user: userId };  // Changed from 'recipient' to 'user' to match the model
-    if (unreadOnly) {
-      filter.read = false;  // Changed from 'isRead' to 'read' to match the model
+    // Build filter object
+    const filter = { user: userId };
+
+    // Filter by read status
+    if (unread === 'true') {
+      filter.read = false;
+    } else if (unread === 'false') {
+      filter.read = true;
     }
 
-    const notifications = await Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+    // Filter by type
+    if (type && isValidNotificationType(type)) {
+      filter.type = type;
+    }
+
+    // Filter by priority
+    if (priority && isValidNotificationPriority(priority)) {
+      filter.priority = priority;
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+
+    // Search in title and message
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      filter.$or = [
+        { title: searchRegex },
+        { message: searchRegex }
+      ];
+    }
+
+    // Execute queries in parallel
+    const [notifications, totalCount] = await Promise.all([
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Notification.countDocuments(filter)
+    ]);
+
+    // Calculate pagination info
+    const totalPages = Math.ceil(totalCount / limitNum);
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
+
+    const paginationData = {
+      notifications,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalCount,
+        limit: limitNum,
+        hasNextPage,
+        hasPrevPage
+      }
+    };
 
     return sendResponse(
       res,
       200,
       true,
       "Notifications fetched successfully",
-      notifications
+      paginationData
     );
   } catch (error) {
     console.error("🔴 [Notification Fetch Error]:", error.message);
@@ -35,17 +111,23 @@ export const getNotifications = async (req, res) => {
   }
 };
 
-// PATCH /api/notifications/mark-read
+// PATCH /api/notifications/mark-read - Mark all notifications as read
 export const markAsRead = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { type, priority } = req.body;
 
-    const result = await Notification.updateMany(
-      { user: userId, read: false },
-      { $set: { read: true } }
-    );
+    // Build criteria for marking as read
+    const criteria = {};
+    if (type && isValidNotificationType(type)) {
+      criteria.type = type;
+    }
+    if (priority && isValidNotificationPriority(priority)) {
+      criteria.priority = priority;
+    }
 
-    // Improved: only return modifiedCount
+    const result = await markNotificationsAsRead(userId, criteria);
+
     return sendResponse(res, 200, true, "Notifications marked as read", {
       modifiedCount: result.modifiedCount,
     });
@@ -60,19 +142,130 @@ export const markAsRead = async (req, res) => {
   }
 };
 
-// DELETE /api/notifications
+// PATCH /api/notifications/:id/mark-read - Mark single notification as read
+export const markSingleAsRead = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return sendResponse(res, 400, false, "Invalid notification ID");
+    }
+
+    const notification = await Notification.findOneAndUpdate(
+      { _id: id, user: userId },
+      { $set: { read: true, readAt: new Date() } },
+      { new: true }
+    );
+
+    if (!notification) {
+      return sendResponse(res, 404, false, "Notification not found");
+    }
+
+    return sendResponse(res, 200, true, "Notification marked as read", notification);
+  } catch (error) {
+    console.error("🔴 [Mark Single Notification Read Error]:", error.message);
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Failed to mark notification as read"
+    );
+  }
+};
+
+// DELETE /api/notifications - Delete notifications with criteria
 export const deleteNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { ids, type, priority, read, olderThan } = req.body;
 
-    const result = await Notification.deleteMany({ recipient: userId });
+    let criteria = {};
 
-    // Improved: only return deletedCount
+    // Delete specific notifications by IDs
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      // Validate all IDs
+      const validIds = ids.filter(id => mongoose.Types.ObjectId.isValid(id));
+      if (validIds.length === 0) {
+        return sendResponse(res, 400, false, "No valid notification IDs provided");
+      }
+      criteria._id = { $in: validIds };
+    } else {
+      // Build criteria for bulk deletion
+      if (type && isValidNotificationType(type)) {
+        criteria.type = type;
+      }
+      if (priority && isValidNotificationPriority(priority)) {
+        criteria.priority = priority;
+      }
+      if (typeof read === 'boolean') {
+        criteria.read = read;
+      }
+      if (olderThan) {
+        const cutoffDate = new Date(olderThan);
+        if (!isNaN(cutoffDate.getTime())) {
+          criteria.createdAt = { $lt: cutoffDate };
+        }
+      }
+    }
+
+    const result = await deleteNotificationsByCriteria(userId, criteria);
+
     return sendResponse(res, 200, true, "Notifications deleted successfully", {
       deletedCount: result.deletedCount,
     });
   } catch (error) {
     console.error("🔴 [Delete Notifications Error]:", error.message);
     return sendResponse(res, 500, false, "Failed to delete notifications");
+  }
+};
+
+// GET /api/notifications/stats - Get notification statistics
+export const getStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const stats = await getNotificationStats(userId);
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Notification statistics fetched successfully",
+      stats
+    );
+  } catch (error) {
+    console.error("🔴 [Get Notification Stats Error]:", error.message);
+    return sendResponse(res, 500, false, "Failed to fetch notification statistics");
+  }
+};
+
+// GET /api/notifications/types - Get available notification types
+export const getNotificationTypes = async (req, res) => {
+  try {
+    const types = Object.entries(NOTIFICATION_TYPES).map(([key, value]) => ({
+      key,
+      value,
+      label: key.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ')
+    }));
+
+    const priorities = Object.entries(NOTIFICATION_PRIORITIES).map(([key, value]) => ({
+      key,
+      value,
+      label: key.charAt(0).toUpperCase() + key.slice(1).toLowerCase()
+    }));
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Notification types and priorities fetched successfully",
+      { types, priorities }
+    );
+  } catch (error) {
+    console.error("🔴 [Get Notification Types Error]:", error.message);
+    return sendResponse(res, 500, false, "Failed to fetch notification types");
   }
 };

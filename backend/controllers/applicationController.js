@@ -3,8 +3,8 @@
 
 import mongoose from "mongoose";
 import Application from "../models/Application.js";
-import Notification from "../models/Notification.js";
 import sendResponse from "../utils/sendResponse.js";
+import { createApplicationStatusNotification } from "../utils/notificationHelpers.js";
 
 // Allowed status values for application updates
 const ALLOWED_STATUSES = ["reviewed", "rejected"];
@@ -54,11 +54,16 @@ export const updateApplicationStatus = async (req, res) => {
     application.status = status;
     await application.save();
 
-    // ✅ Create notification for student
-    await Notification.create({
-      user: application.student,
-      message: `Your application for ${job.title} has been ${status}`,
-    });
+    // ✅ Create notification for student using helper
+    await createApplicationStatusNotification(
+      application.student,
+      job.title,
+      status,
+      {
+        applicationId: application._id,
+        jobId: job._id
+      }
+    );
 
     return sendResponse(
       res,

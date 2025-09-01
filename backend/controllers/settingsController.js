@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import sendResponse from "../utils/sendResponse.js";
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
+import { NOTIFICATION_TYPES } from "../utils/notificationHelpers.js";
 
 // ✅ Get Profile Info (for Settings page)
 export const getProfileInfo = async (req, res) => {
@@ -131,6 +132,151 @@ export const changePassword = async (req, res) => {
     return sendResponse(res, 200, true, "Password changed successfully");
   } catch (error) {
     console.error("[changePassword] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Get Notification Preferences
+export const getNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId).select("notificationPreferences");
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Ensure default preferences exist if not set
+    if (!user.notificationPreferences) {
+      user.notificationPreferences = {};
+      await user.save();
+    }
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Notification preferences fetched successfully",
+      user.notificationPreferences
+    );
+  } catch (error) {
+    console.error("[getNotificationPreferences] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Update Notification Preferences
+export const updateNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const preferences = req.body;
+
+    // Validate the structure of preferences
+    const validChannels = ['email', 'push', 'inApp'];
+    const validTypes = Object.values(NOTIFICATION_TYPES);
+
+    // Validate preferences structure
+    for (const channel of validChannels) {
+      if (preferences[channel]) {
+        // Validate enabled field
+        if (preferences[channel].enabled !== undefined && typeof preferences[channel].enabled !== 'boolean') {
+          return sendResponse(res, 400, false, `Invalid ${channel}.enabled value. Must be boolean.`);
+        }
+
+        // Validate types
+        if (preferences[channel].types) {
+          for (const type in preferences[channel].types) {
+            if (!validTypes.includes(type)) {
+              return sendResponse(res, 400, false, `Invalid notification type: ${type}`);
+            }
+            if (typeof preferences[channel].types[type] !== 'boolean') {
+              return sendResponse(res, 400, false, `Invalid ${channel}.types.${type} value. Must be boolean.`);
+            }
+          }
+        }
+      }
+    }
+
+    // Validate quiet hours if provided
+    if (preferences.quietHours) {
+      const { enabled, start, end, timezone } = preferences.quietHours;
+      
+      if (enabled !== undefined && typeof enabled !== 'boolean') {
+        return sendResponse(res, 400, false, "Invalid quietHours.enabled value. Must be boolean.");
+      }
+
+      // Validate time format (HH:MM)
+      const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (start && !timeRegex.test(start)) {
+        return sendResponse(res, 400, false, "Invalid quietHours.start format. Use HH:MM format.");
+      }
+      if (end && !timeRegex.test(end)) {
+        return sendResponse(res, 400, false, "Invalid quietHours.end format. Use HH:MM format.");
+      }
+
+      if (timezone && typeof timezone !== 'string') {
+        return sendResponse(res, 400, false, "Invalid quietHours.timezone value. Must be string.");
+      }
+    }
+
+    // Update user preferences
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { 
+        $set: {
+          notificationPreferences: {
+            ...preferences
+          }
+        }
+      },
+      { new: true, runValidators: true }
+    ).select("notificationPreferences");
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Notification preferences updated successfully",
+      user.notificationPreferences
+    );
+  } catch (error) {
+    console.error("[updateNotificationPreferences] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Reset Notification Preferences to Default
+export const resetNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Reset to default preferences by unsetting and letting defaults apply
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $unset: { notificationPreferences: 1 } },
+      { new: true }
+    );
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Get the user again to get default preferences
+    const updatedUser = await User.findById(userId).select("notificationPreferences");
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Notification preferences reset to default",
+      updatedUser.notificationPreferences
+    );
+  } catch (error) {
+    console.error("[resetNotificationPreferences] Error:", error);
     return sendResponse(res, 500, false, "Server error");
   }
 };

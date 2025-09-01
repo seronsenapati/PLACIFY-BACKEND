@@ -4,6 +4,9 @@ import {
   getProfileInfo,
   updateProfileInfo,
   changePassword,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  resetNotificationPreferences,
 } from "../controllers/settingsController.js";
 import uploadProfilePhoto from "../controllers/uploadProfilePhoto.js";
 
@@ -22,5 +25,14 @@ router.patch(
 
 // ✅ Change password
 router.patch("/password", protect, changePassword);
+
+// ✅ Get notification preferences
+router.get("/notifications", protect, getNotificationPreferences);
+
+// ✅ Update notification preferences
+router.patch("/notifications", protect, updateNotificationPreferences);
+
+// ✅ Reset notification preferences to default
+router.post("/notifications/reset", protect, resetNotificationPreferences);
 
 export default router;

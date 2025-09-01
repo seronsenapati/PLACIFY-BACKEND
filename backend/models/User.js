@@ -20,6 +20,57 @@ const socialProfilesSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Define sub-schema for Notification Preferences
+const notificationPreferencesSchema = new mongoose.Schema(
+  {
+    email: {
+      enabled: { type: Boolean, default: true },
+      types: {
+        application_status: { type: Boolean, default: true },
+        new_application: { type: Boolean, default: true },
+        job_expiring: { type: Boolean, default: true },
+        job_expired: { type: Boolean, default: true },
+        system_message: { type: Boolean, default: true },
+        account_update: { type: Boolean, default: false },
+        payment_update: { type: Boolean, default: true },
+        reminder: { type: Boolean, default: true }
+      }
+    },
+    push: {
+      enabled: { type: Boolean, default: true },
+      types: {
+        application_status: { type: Boolean, default: true },
+        new_application: { type: Boolean, default: true },
+        job_expiring: { type: Boolean, default: false },
+        job_expired: { type: Boolean, default: false },
+        system_message: { type: Boolean, default: true },
+        account_update: { type: Boolean, default: false },
+        payment_update: { type: Boolean, default: true },
+        reminder: { type: Boolean, default: true }
+      }
+    },
+    inApp: {
+      enabled: { type: Boolean, default: true },
+      types: {
+        application_status: { type: Boolean, default: true },
+        new_application: { type: Boolean, default: true },
+        job_expiring: { type: Boolean, default: true },
+        job_expired: { type: Boolean, default: true },
+        system_message: { type: Boolean, default: true },
+        account_update: { type: Boolean, default: true },
+        payment_update: { type: Boolean, default: true },
+        reminder: { type: Boolean, default: true }
+      }
+    },
+    quietHours: {
+      enabled: { type: Boolean, default: false },
+      start: { type: String, default: "22:00" }, // 10 PM
+      end: { type: String, default: "08:00" }, // 8 AM
+      timezone: { type: String, default: "UTC" }
+    }
+  },
+  { _id: false }
+);
 // Define sub-schema for About section (REMOVED openToRoles)
 const aboutSchema = new mongoose.Schema(
   {
@@ -89,6 +140,12 @@ const userSchema = new mongoose.Schema(
     company: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
+    },
+
+    // Notification preferences
+    notificationPreferences: {
+      type: notificationPreferencesSchema,
+      default: () => ({})
     },
   },
   { timestamps: true }

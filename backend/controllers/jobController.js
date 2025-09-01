@@ -4,9 +4,9 @@ import validateFields from "../utils/validateFields.js";
 import { validateJobFields } from "../utils/validateAdvancedFields.js";
 import Application from "../models/Application.js";
 import Company from "../models/Company.js";
-import Notification from "../models/Notification.js";
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
+import { createNewApplicationNotification } from "../utils/notificationHelpers.js";
 
 // Create job
 export const createJob = async (req, res) => {
@@ -293,13 +293,17 @@ export const applyToJob = async (req, res) => {
       resumeUrl,
     });
 
-    const message = `New application received for ${job.title}`;
-
-    // Create notification for the recruiter
-    await Notification.create({
-      user: job.createdBy._id,  // Using 'user' to match the Notification model
-      message,
-    });
+    // Create notification for the recruiter using helper
+    await createNewApplicationNotification(
+      job.createdBy._id,
+      job.title,
+      req.user.name || 'Unknown User',
+      {
+        applicationId: application._id,
+        jobId: job._id,
+        studentId: req.user.id
+      }
+    );
 
     return sendResponse(
       res,
