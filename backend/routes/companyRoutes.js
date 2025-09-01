@@ -11,7 +11,7 @@ import { isRecruiterOrAdmin } from "../middleware/rbacMiddleware.js";
 import { body } from "express-validator";
 import { validateRequest } from "../middleware/validate.js";
 import { validateObjectId } from "../middleware/objectIdValidator.js";
-import { logoUpload } from "../controllers/logoUploadController.js";
+import uploadProfilePhoto from "../controllers/uploadProfilePhoto.js";
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ router.post(
   "/",
   protect,
   isRecruiterOrAdmin,
-  logoUpload.single("logo"),
+  uploadProfilePhoto.single("logo"),
   [
     body("name").notEmpty().withMessage("Company name is required"),
     body("desc").notEmpty().withMessage("Description is required"),
@@ -41,7 +41,7 @@ router.patch(
   "/:id",
   protect,
   isRecruiterOrAdmin,
-  logoUpload.single("logo"),
+  uploadProfilePhoto.single("logo"),
   validateObjectId("id"),
   [
     body("name").optional().notEmpty().withMessage("Name cannot be empty"),

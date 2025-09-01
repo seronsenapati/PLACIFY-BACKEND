@@ -13,6 +13,7 @@ import validateRequest from "../middleware/validate.js";
 import uploadResume from "../controllers/resumeUploadController.js";
 import { isRecruiterOrAdmin, isStudent } from "../middleware/rbacMiddleware.js";
 import validateObjectId from "../middleware/objectIdValidator.js";
+import { applicationSubmissionLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
@@ -83,9 +84,18 @@ router.delete(
  */
 router.post(
   "/:jobId/apply",
+  applicationSubmissionLimiter,
   protect,
   isStudent,
   validateObjectId("jobId"),
+  [
+    body("coverLetter")
+      .optional()
+      .isLength({ max: 2000 })
+      .withMessage("Cover letter cannot exceed 2000 characters")
+      .trim()
+  ],
+  validateRequest,
   uploadResume.single("resume"),
   applyToJob
 );

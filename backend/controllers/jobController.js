@@ -1,5 +1,6 @@
+import mongoose from "mongoose";
 import Job from "../models/Job.js";
-import sendResponse from "../utils/sendResponse.js";
+import { sendResponse, sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
 import validateFields from "../utils/validateFields.js";
 import { validateJobFields } from "../utils/validateAdvancedFields.js";
 import Application from "../models/Application.js";
@@ -7,6 +8,8 @@ import Company from "../models/Company.js";
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
 import { createNewApplicationNotification } from "../utils/notificationHelpers.js";
+import { logInfo, logError } from "../utils/logger.js";
+import { v4 as uuidv4 } from 'uuid';
 
 // Create job
 export const createJob = async (req, res) => {
@@ -223,34 +226,59 @@ export const getJobById = async (req, res) => {
 
 // Apply for a Job
 export const applyToJob = async (req, res) => {
+  const requestId = uuidv4();
+  const { jobId } = req.params;
+  const { coverLetter } = req.body;
+
+  logInfo('Job application initiated', {
+    requestId,
+    jobId,
+    studentId: req.user.id,
+    hasResume: !!req.file,
+    resumeSize: req.file?.size,
+    resumeType: req.file?.mimetype
+  });
+
   try {
     if (req.user.role !== "student") {
-      return sendResponse(res, 403, false, "Only students can apply for jobs");
+      return sendErrorResponse(res, 'AUTH_005', {}, requestId);
     }
-
-    const { jobId } = req.params;
 
     // Check if resume file is provided
     if (!req.file) {
-      return sendResponse(res, 400, false, "Resume file is required");
+      return sendErrorResponse(res, 'APP_005', {}, requestId);
     }
 
     // Validate file type
-    if (![
+    const allowedMimeTypes = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ].includes(req.file.mimetype)) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        "Only PDF or DOCX files are allowed for resume"
-      );
+    ];
+    
+    if (!allowedMimeTypes.includes(req.file.mimetype)) {
+      return sendErrorResponse(res, 'VAL_003', { 
+        allowedTypes: 'PDF, DOCX',
+        receivedType: req.file.mimetype 
+      }, requestId);
+    }
+
+    // Validate file size (10MB limit)
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    if (req.file.size > maxFileSize) {
+      return sendErrorResponse(res, 'VAL_004', { 
+        maxSize: '10MB',
+        receivedSize: Math.round(req.file.size / 1024 / 1024 * 100) / 100 + 'MB'
+      }, requestId);
+    }
+
+    // Validate job ID
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return sendErrorResponse(res, 'JOB_003', {}, requestId);
     }
 
     const job = await Job.findById(jobId).populate("createdBy");
     if (!job) {
-      return sendResponse(res, 404, false, "Job not found");
+      return sendErrorResponse(res, 'JOB_001', {}, requestId);
     }
 
     const alreadyApplied = await Application.findOne({
@@ -259,12 +287,10 @@ export const applyToJob = async (req, res) => {
     });
 
     if (alreadyApplied) {
-      return sendResponse(
-        res,
-        400,
-        false,
-        "You have already applied to this job"
-      );
+      return sendErrorResponse(res, 'APP_002', { 
+        applicationId: alreadyApplied._id,
+        applicationDate: alreadyApplied.createdAt
+      }, requestId);
     }
 
     // Upload resume to Cloudinary
@@ -274,6 +300,9 @@ export const applyToJob = async (req, res) => {
           {
             resource_type: "raw",
             folder: "placify_resumes",
+            public_id: `resume_${req.user.id}_${jobId}_${Date.now()}`,
+            use_filename: true,
+            unique_filename: false,
           },
           (error, result) => {
             if (result) resolve(result);
@@ -284,36 +313,88 @@ export const applyToJob = async (req, res) => {
       });
     };
 
-    const result = await streamUpload();
-    const resumeUrl = result.secure_url;
+    let uploadResult;
+    try {
+      uploadResult = await streamUpload();
+    } catch (uploadError) {
+      logError('Resume upload failed', uploadError, {
+        requestId,
+        jobId,
+        studentId: req.user.id
+      });
+      return sendErrorResponse(res, 'FILE_001', {}, requestId);
+    }
 
+    // Create application with enhanced metadata
     const application = await Application.create({
       job: jobId,
       student: req.user.id,
-      resumeUrl,
+      resumeUrl: uploadResult.secure_url,
+      resumeFileName: req.file.originalname,
+      resumeFileSize: req.file.size,
+      coverLetter: coverLetter?.trim(),
+      metadata: {
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        source: 'web'
+      }
+    });
+
+    logInfo('Application submitted successfully', {
+      requestId,
+      applicationId: application._id,
+      jobId,
+      studentId: req.user.id,
+      jobTitle: job.title,
+      resumeUrl: uploadResult.secure_url
     });
 
     // Create notification for the recruiter using helper
-    await createNewApplicationNotification(
-      job.createdBy._id,
-      job.title,
-      req.user.name || 'Unknown User',
-      {
+    try {
+      await createNewApplicationNotification(
+        job.createdBy._id,
+        job.title,
+        req.user.name || 'Unknown User',
+        {
+          applicationId: application._id,
+          jobId: job._id,
+          studentId: req.user.id
+        }
+      );
+    } catch (notificationError) {
+      logError('Failed to create application notification', notificationError, {
+        requestId,
         applicationId: application._id,
-        jobId: job._id,
-        studentId: req.user.id
-      }
-    );
+        recruiterId: job.createdBy._id
+      });
+      // Don't fail the request if notification fails
+    }
 
-    return sendResponse(
+    return sendSuccessResponse(
       res,
-      201,
-      true,
       "Application submitted successfully",
-      application
+      {
+        application: {
+          id: application._id,
+          status: application.status,
+          submittedAt: application.createdAt,
+          job: {
+            id: job._id,
+            title: job.title,
+            role: job.role,
+            company: job.createdBy.name
+          }
+        }
+      },
+      201,
+      requestId
     );
   } catch (error) {
-    console.error("[ApplyToJob] Error:", error.message);
-    return sendResponse(res, 500, false, "Server error");
+    logError("Job application error", error, {
+      requestId,
+      jobId,
+      studentId: req.user.id
+    });
+    return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };

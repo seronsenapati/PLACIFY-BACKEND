@@ -1,0 +1,499 @@
+2025-09-02 02:04:07:47 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::3000
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Metadata: {
+  "error": {
+    "code": "EADDRINUSE",
+    "errno": -4091,
+    "syscall": "listen",
+    "address": "::",
+    "port": 3000
+  },
+  "exception": true,
+  "date": "Tue Sep 02 2025 02:04:07 GMT+0530 (India Standard Time)",
+  "process": {
+    "pid": 14612,
+    "uid": null,
+    "gid": null,
+    "cwd": "D:\\PLACIFY-BACKEND\\backend",
+    "execPath": "C:\\Program Files\\nodejs\\node.exe",
+    "version": "v22.19.0",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\PLACIFY-BACKEND\\backend\\server.js"
+    ],
+    "memoryUsage": {
+      "rss": 108670976,
+      "heapTotal": 66834432,
+      "heapUsed": 36431680,
+      "external": 22160056,
+      "arrayBuffers": 18357567
+    }
+  },
+  "os": {
+    "loadavg": [
+      0,
+      0,
+      0
+    ],
+    "uptime": 95023.265
+  },
+  "trace": [
+    {
+      "column": 16,
+      "file": "node:net",
+      "function": "Server.setupListenHandle [as _listen2]",
+      "line": 1940,
+      "method": "setupListenHandle [as _listen2]",
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:net",
+      "function": "listenInCluster",
+      "line": 1997,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 7,
+      "file": "node:net",
+      "function": "Server.listen",
+      "line": 2102,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 24,
+      "file": "D:\\PLACIFY-BACKEND\\backend\\node_modules\\express\\lib\\application.js",
+      "function": "Function.listen",
+      "line": 635,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 9,
+      "file": "file:///D:/PLACIFY-BACKEND/backend/server.js",
+      "function": "startServer",
+      "line": 75,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 5,
+      "file": "node:internal/process/task_queues",
+      "function": "process.processTicksAndRejections",
+      "line": 105,
+      "method": "processTicksAndRejections",
+      "native": false
+    }
+  ]
+}
+2025-09-02 02:19:57:1957 [ERROR]: uncaughtException: logoUpload is not defined
+ReferenceError: logoUpload is not defined
+    at file:///D:/PLACIFY-BACKEND/backend/routes/companyRoutes.js:26:3
+    at ModuleJob.run (node:internal/modules/esm/module_job:345:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:651:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+ReferenceError: logoUpload is not defined
+    at file:///D:/PLACIFY-BACKEND/backend/routes/companyRoutes.js:26:3
+    at ModuleJob.run (node:internal/modules/esm/module_job:345:25)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:651:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+Metadata: {
+  "error": {},
+  "exception": true,
+  "date": "Tue Sep 02 2025 02:19:57 GMT+0530 (India Standard Time)",
+  "process": {
+    "pid": 7032,
+    "uid": null,
+    "gid": null,
+    "cwd": "D:\\PLACIFY-BACKEND\\backend",
+    "execPath": "C:\\Program Files\\nodejs\\node.exe",
+    "version": "v22.19.0",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\PLACIFY-BACKEND\\backend\\server.js"
+    ],
+    "memoryUsage": {
+      "rss": 90267648,
+      "heapTotal": 61960192,
+      "heapUsed": 38166448,
+      "external": 21977172,
+      "arrayBuffers": 18330183
+    }
+  },
+  "os": {
+    "loadavg": [
+      0,
+      0,
+      0
+    ],
+    "uptime": 95973.421
+  },
+  "trace": [
+    {
+      "column": 3,
+      "file": "file:///D:/PLACIFY-BACKEND/backend/routes/companyRoutes.js",
+      "function": null,
+      "line": 26,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 25,
+      "file": "node:internal/modules/esm/module_job",
+      "function": "ModuleJob.run",
+      "line": 345,
+      "method": "run",
+      "native": false
+    },
+    {
+      "column": 5,
+      "file": "node:internal/process/task_queues",
+      "function": "process.processTicksAndRejections",
+      "line": 105,
+      "method": "processTicksAndRejections",
+      "native": false
+    },
+    {
+      "column": 26,
+      "file": "node:internal/modules/esm/loader",
+      "function": "async onImport.tracePromise.__proto__",
+      "line": 651,
+      "method": "__proto__",
+      "native": false
+    },
+    {
+      "column": 5,
+      "file": "node:internal/modules/run_main",
+      "function": "async asyncRunEntryPointWithESMLoader",
+      "line": 117,
+      "method": null,
+      "native": false
+    }
+  ]
+}
+2025-09-02 02:21:03:213 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::3000
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Metadata: {
+  "error": {
+    "code": "EADDRINUSE",
+    "errno": -4091,
+    "syscall": "listen",
+    "address": "::",
+    "port": 3000
+  },
+  "exception": true,
+  "date": "Tue Sep 02 2025 02:21:03 GMT+0530 (India Standard Time)",
+  "process": {
+    "pid": 15676,
+    "uid": null,
+    "gid": null,
+    "cwd": "D:\\PLACIFY-BACKEND\\backend",
+    "execPath": "C:\\Program Files\\nodejs\\node.exe",
+    "version": "v22.19.0",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\PLACIFY-BACKEND\\backend\\server.js"
+    ],
+    "memoryUsage": {
+      "rss": 105897984,
+      "heapTotal": 67096576,
+      "heapUsed": 36393184,
+      "external": 22186420,
+      "arrayBuffers": 18357743
+    }
+  },
+  "os": {
+    "loadavg": [
+      0,
+      0,
+      0
+    ],
+    "uptime": 96039.484
+  },
+  "trace": [
+    {
+      "column": 16,
+      "file": "node:net",
+      "function": "Server.setupListenHandle [as _listen2]",
+      "line": 1940,
+      "method": "setupListenHandle [as _listen2]",
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:net",
+      "function": "listenInCluster",
+      "line": 1997,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 7,
+      "file": "node:net",
+      "function": "Server.listen",
+      "line": 2102,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 24,
+      "file": "D:\\PLACIFY-BACKEND\\backend\\node_modules\\express\\lib\\application.js",
+      "function": "Function.listen",
+      "line": 635,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 9,
+      "file": "file:///D:/PLACIFY-BACKEND/backend/server.js",
+      "function": "startServer",
+      "line": 75,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 5,
+      "file": "node:internal/process/task_queues",
+      "function": "process.processTicksAndRejections",
+      "line": 105,
+      "method": "processTicksAndRejections",
+      "native": false
+    }
+  ]
+}
+2025-09-02 02:21:27:2127 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::3000
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Metadata: {
+  "error": {
+    "code": "EADDRINUSE",
+    "errno": -4091,
+    "syscall": "listen",
+    "address": "::",
+    "port": 3000
+  },
+  "exception": true,
+  "date": "Tue Sep 02 2025 02:21:27 GMT+0530 (India Standard Time)",
+  "process": {
+    "pid": 3012,
+    "uid": null,
+    "gid": null,
+    "cwd": "D:\\PLACIFY-BACKEND\\backend",
+    "execPath": "C:\\Program Files\\nodejs\\node.exe",
+    "version": "v22.19.0",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\PLACIFY-BACKEND\\backend\\server.js"
+    ],
+    "memoryUsage": {
+      "rss": 106160128,
+      "heapTotal": 67096576,
+      "heapUsed": 36459920,
+      "external": 22186220,
+      "arrayBuffers": 18357543
+    }
+  },
+  "os": {
+    "loadavg": [
+      0,
+      0,
+      0
+    ],
+    "uptime": 96063.875
+  },
+  "trace": [
+    {
+      "column": 16,
+      "file": "node:net",
+      "function": "Server.setupListenHandle [as _listen2]",
+      "line": 1940,
+      "method": "setupListenHandle [as _listen2]",
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:net",
+      "function": "listenInCluster",
+      "line": 1997,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 7,
+      "file": "node:net",
+      "function": "Server.listen",
+      "line": 2102,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 24,
+      "file": "D:\\PLACIFY-BACKEND\\backend\\node_modules\\express\\lib\\application.js",
+      "function": "Function.listen",
+      "line": 635,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 9,
+      "file": "file:///D:/PLACIFY-BACKEND/backend/server.js",
+      "function": "startServer",
+      "line": 75,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 5,
+      "file": "node:internal/process/task_queues",
+      "function": "process.processTicksAndRejections",
+      "line": 105,
+      "method": "processTicksAndRejections",
+      "native": false
+    }
+  ]
+}
+2025-09-02 02:21:31:2131 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::3000
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (D:\PLACIFY-BACKEND\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (file:///D:/PLACIFY-BACKEND/backend/server.js:75:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Metadata: {
+  "error": {
+    "code": "EADDRINUSE",
+    "errno": -4091,
+    "syscall": "listen",
+    "address": "::",
+    "port": 3000
+  },
+  "exception": true,
+  "date": "Tue Sep 02 2025 02:21:31 GMT+0530 (India Standard Time)",
+  "process": {
+    "pid": 12628,
+    "uid": null,
+    "gid": null,
+    "cwd": "D:\\PLACIFY-BACKEND\\backend",
+    "execPath": "C:\\Program Files\\nodejs\\node.exe",
+    "version": "v22.19.0",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\PLACIFY-BACKEND\\backend\\server.js"
+    ],
+    "memoryUsage": {
+      "rss": 105627648,
+      "heapTotal": 66572288,
+      "heapUsed": 36340016,
+      "external": 22160056,
+      "arrayBuffers": 18357567
+    }
+  },
+  "os": {
+    "loadavg": [
+      0,
+      0,
+      0
+    ],
+    "uptime": 96067.437
+  },
+  "trace": [
+    {
+      "column": 16,
+      "file": "node:net",
+      "function": "Server.setupListenHandle [as _listen2]",
+      "line": 1940,
+      "method": "setupListenHandle [as _listen2]",
+      "native": false
+    },
+    {
+      "column": 12,
+      "file": "node:net",
+      "function": "listenInCluster",
+      "line": 1997,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 7,
+      "file": "node:net",
+      "function": "Server.listen",
+      "line": 2102,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 24,
+      "file": "D:\\PLACIFY-BACKEND\\backend\\node_modules\\express\\lib\\application.js",
+      "function": "Function.listen",
+      "line": 635,
+      "method": "listen",
+      "native": false
+    },
+    {
+      "column": 9,
+      "file": "file:///D:/PLACIFY-BACKEND/backend/server.js",
+      "function": "startServer",
+      "line": 75,
+      "method": null,
+      "native": false
+    },
+    {
+      "column": 5,
+      "file": "node:internal/process/task_queues",
+      "function": "process.processTicksAndRejections",
+      "line": 105,
+      "method": "processTicksAndRejections",
+      "native": false
+    }
+  ]
+}
