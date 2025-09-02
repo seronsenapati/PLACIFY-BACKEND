@@ -151,6 +151,12 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add index for better performance on bookmarkedJobs queries
+// Only create index in production or if explicitly enabled
+if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'true') {
+  userSchema.index({ bookmarkedJobs: 1 }, { background: true });
+}
+
 const User = mongoose.model("User", userSchema);
 
 export default User;

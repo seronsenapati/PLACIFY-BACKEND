@@ -58,5 +58,11 @@ const jobSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add index for better performance on createdBy queries
+// Only create index in production or if explicitly enabled
+if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'true') {
+  jobSchema.index({ createdBy: 1 }, { background: true });
+}
+
 const Job = mongoose.model("Job", jobSchema);
 export default Job;

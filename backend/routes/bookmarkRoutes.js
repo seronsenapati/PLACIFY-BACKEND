@@ -3,6 +3,7 @@ import {
   bookmarkJob,
   getBookmarkedJobs,
   unbookmarkJob,
+  checkIfBookmarked
 } from "../controllers/bookmarkController.js";
 import protect from "../middleware/authMiddleware.js";
 import { isStudent } from "../middleware/rbacMiddleware.js";
@@ -21,6 +22,15 @@ router.post(
 
 // GET /api/bookmarks – Get all bookmarked jobs
 router.get("/", protect, isStudent, getBookmarkedJobs);
+
+// GET /api/bookmarks/check/:jobId – Check if a job is bookmarked
+router.get(
+  "/check/:jobId",
+  protect,
+  isStudent,
+  validateObjectId("jobId"),
+  checkIfBookmarked
+);
 
 // DELETE /api/bookmarks/:jobId – Unbookmark a job
 router.delete(

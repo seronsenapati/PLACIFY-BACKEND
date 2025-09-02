@@ -18,9 +18,23 @@ import adminRoutes from "./routes/adminRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 
-import "./cronJobs/autoCleanup.js"; // Importing the auto cleanup job
+// Only import cron jobs in production or if explicitly enabled
+if (process.env.NODE_ENV === 'production' || process.env.ENABLE_CRON === 'true') {
+  import("./cronJobs/autoCleanup.js"); // Importing the auto cleanup job
+}
 
 dotenv.config();
+
+// Add error handling for uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,17 +82,63 @@ app.all("*", (req, res) => {
   });
 });
 
+// Graceful shutdown
+let server;
+
 // Start server
 const startServer = async () => {
   try {
+    console.log("Connecting to MongoDB...");
     await connectDB();
-    app.listen(PORT, () => {
+    console.log("MongoDB connected successfully");
+    
+    server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    });
+    
+    // Handle server errors
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is already in use. Trying ${PORT + 1}...`);
+        setTimeout(() => {
+          server = app.listen(PORT + 1, () => {
+            console.log(`🚀 Server is running on http://localhost:${PORT + 1}`);
+          });
+        }, 1000);
+      } else {
+        console.error('Server error:', err);
+        process.exit(1);
+      }
     });
   } catch (error) {
     console.error("❌ Failed to connect to database:", error);
     process.exit(1);
   }
 };
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  if (server) {
+    server.close(() => {
+      console.log('Process terminated gracefully');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  if (server) {
+    server.close(() => {
+      console.log('Process terminated gracefully');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+});
 
 startServer();
