@@ -1,13 +1,17 @@
 import User from "../models/User.js";
 import Job from "../models/Job.js";
 import sendResponse from "../utils/sendResponse.js";
-import { logInfo, logError } from "../utils/logger.js";
+import { logInfo, logError, logWarn } from "../utils/logger.js";
+import { v4 as uuidv4 } from 'uuid';
 
 // POST /api/bookmarks/:jobId
 export const bookmarkJob = async (req, res) => {
+  const requestId = uuidv4();
+  
   try {
     if (req.user.role !== "student") {
       logWarn("Non-student user attempted to bookmark job", {
+        requestId,
         userId: req.user._id,
         role: req.user.role,
         jobId: req.params.jobId
@@ -18,6 +22,7 @@ export const bookmarkJob = async (req, res) => {
     const { jobId } = req.params;
     
     logInfo("Attempting to bookmark job", {
+      requestId,
       userId: req.user._id,
       jobId
     });
@@ -26,6 +31,7 @@ export const bookmarkJob = async (req, res) => {
     const job = await Job.findById(jobId);
     if (!job) {
       logWarn("Job not found when attempting to bookmark", {
+        requestId,
         userId: req.user._id,
         jobId
       });
@@ -40,6 +46,7 @@ export const bookmarkJob = async (req, res) => {
     );
     if (alreadyBookmarked) {
       logWarn("Job already bookmarked", {
+        requestId,
         userId: req.user._id,
         jobId
       });
@@ -50,6 +57,7 @@ export const bookmarkJob = async (req, res) => {
     await user.save();
     
     logInfo("Job bookmarked successfully", {
+      requestId,
       userId: req.user._id,
       jobId
     });
@@ -57,6 +65,7 @@ export const bookmarkJob = async (req, res) => {
     return sendResponse(res, 200, true, "Job bookmarked successfully");
   } catch (error) {
     logError("Error bookmarking job", error, {
+      requestId,
       userId: req.user._id,
       jobId: req.params.jobId
     });
@@ -66,9 +75,12 @@ export const bookmarkJob = async (req, res) => {
 
 // GET /api/bookmarks
 export const getBookmarkedJobs = async (req, res) => {
+  const requestId = uuidv4();
+  
   try {
     if (req.user.role !== "student") {
       logWarn("Non-student user attempted to get bookmarked jobs", {
+        requestId,
         userId: req.user._id,
         role: req.user.role
       });
@@ -81,6 +93,7 @@ export const getBookmarkedJobs = async (req, res) => {
     }
 
     logInfo("Fetching bookmarked jobs", {
+      requestId,
       userId: req.user._id
     });
 
@@ -96,6 +109,7 @@ export const getBookmarkedJobs = async (req, res) => {
     const bookmarkedJobs = user.bookmarkedJobs || [];
     
     logInfo("Bookmarked jobs retrieved successfully", {
+      requestId,
       userId: req.user._id,
       count: bookmarkedJobs.length
     });
@@ -109,6 +123,7 @@ export const getBookmarkedJobs = async (req, res) => {
     );
   } catch (error) {
     logError("Error retrieving bookmarked jobs", error, {
+      requestId,
       userId: req.user._id
     });
     return sendResponse(res, 500, false, "Server error");
@@ -117,9 +132,12 @@ export const getBookmarkedJobs = async (req, res) => {
 
 // GET /api/bookmarks/check/:jobId - Check if a job is bookmarked
 export const checkIfBookmarked = async (req, res) => {
+  const requestId = uuidv4();
+  
   try {
     if (req.user.role !== "student") {
       logWarn("Non-student user attempted to check bookmark status", {
+        requestId,
         userId: req.user._id,
         role: req.user.role,
         jobId: req.params.jobId
@@ -135,6 +153,7 @@ export const checkIfBookmarked = async (req, res) => {
     const { jobId } = req.params;
     
     logInfo("Checking bookmark status", {
+      requestId,
       userId: req.user._id,
       jobId
     });
@@ -143,6 +162,7 @@ export const checkIfBookmarked = async (req, res) => {
     const job = await Job.findById(jobId);
     if (!job) {
       logWarn("Job not found when checking bookmark status", {
+        requestId,
         userId: req.user._id,
         jobId
       });
@@ -155,6 +175,7 @@ export const checkIfBookmarked = async (req, res) => {
     const isBookmarked = user.bookmarkedJobs.some((id) => id.equals(jobId));
     
     logInfo("Bookmark status retrieved successfully", {
+      requestId,
       userId: req.user._id,
       jobId,
       isBookmarked
@@ -169,6 +190,7 @@ export const checkIfBookmarked = async (req, res) => {
     );
   } catch (error) {
     logError("Error checking bookmark status", error, {
+      requestId,
       userId: req.user._id,
       jobId: req.params.jobId
     });
@@ -178,9 +200,12 @@ export const checkIfBookmarked = async (req, res) => {
 
 // DELETE /api/bookmarks/:jobId
 export const unbookmarkJob = async (req, res) => {
+  const requestId = uuidv4();
+  
   try {
     if (req.user.role !== "student") {
       logWarn("Non-student user attempted to unbookmark job", {
+        requestId,
         userId: req.user._id,
         role: req.user.role,
         jobId: req.params.jobId
@@ -191,6 +216,7 @@ export const unbookmarkJob = async (req, res) => {
     const { jobId } = req.params;
     
     logInfo("Attempting to unbookmark job", {
+      requestId,
       userId: req.user._id,
       jobId
     });
@@ -199,6 +225,7 @@ export const unbookmarkJob = async (req, res) => {
     const job = await Job.findById(jobId);
     if (!job) {
       logWarn("Job not found when attempting to unbookmark", {
+        requestId,
         userId: req.user._id,
         jobId
       });
@@ -211,6 +238,7 @@ export const unbookmarkJob = async (req, res) => {
     const isBookmarked = user.bookmarkedJobs.some((id) => id.equals(jobId));
     if (!isBookmarked) {
       logWarn("Job is not bookmarked when attempting to unbookmark", {
+        requestId,
         userId: req.user._id,
         jobId
       });
@@ -222,6 +250,7 @@ export const unbookmarkJob = async (req, res) => {
     await user.save();
     
     logInfo("Job unbookmarked successfully", {
+      requestId,
       userId: req.user._id,
       jobId
     });
@@ -229,6 +258,7 @@ export const unbookmarkJob = async (req, res) => {
     return sendResponse(res, 200, true, "Job unbookmarked successfully");
   } catch (error) {
     logError("Error unbookmarking job", error, {
+      requestId,
       userId: req.user._id,
       jobId: req.params.jobId
     });
