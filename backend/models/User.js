@@ -158,6 +158,38 @@ if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'tru
   userSchema.index({ company: 1 }, { background: true });
 }
 
+// Static method to get user statistics
+userSchema.statics.getStats = async function() {
+  const stats = await this.aggregate([
+    {
+      $group: {
+        _id: '$role',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  const result = {
+    total: 0,
+    students: 0,
+    recruiters: 0,
+    admins: 0
+  };
+  
+  stats.forEach(stat => {
+    if (stat._id === 'student') {
+      result.students = stat.count;
+    } else if (stat._id === 'recruiter') {
+      result.recruiters = stat.count;
+    } else if (stat._id === 'admin') {
+      result.admins = stat.count;
+    }
+    result.total += stat.count;
+  });
+  
+  return result;
+};
+
 const User = mongoose.model("User", userSchema);
 
 export default User;

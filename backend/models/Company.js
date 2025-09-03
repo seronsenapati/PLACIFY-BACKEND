@@ -41,5 +41,37 @@ const companySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Static method to get company statistics
+companySchema.statics.getStats = async function() {
+  const total = await this.countDocuments();
+  
+  // Count companies with active jobs
+  const companiesWithJobs = await this.aggregate([
+    {
+      $lookup: {
+        from: "jobs",
+        localField: "jobs",
+        foreignField: "_id",
+        as: "activeJobs"
+      }
+    },
+    {
+      $match: {
+        "activeJobs.0": { $exists: true }
+      }
+    },
+    {
+      $count: "count"
+    }
+  ]);
+  
+  const active = companiesWithJobs.length > 0 ? companiesWithJobs[0].count : 0;
+  
+  return {
+    total,
+    active
+  };
+};
+
 const Company = mongoose.model("Company", companySchema);
 export default Company;

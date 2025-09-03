@@ -3,7 +3,7 @@ import { body, query } from "express-validator";
 
 import { 
   getStudentApplications, 
-  getStudentApplicationStats 
+  getStudentApplicationStats
 } from "../controllers/getStudentApplications.js";
 import { 
   getJobApplications, 

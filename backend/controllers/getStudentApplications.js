@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Application from "../models/Application.js";
 import { sendResponse, sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
-import { logInfo, logError } from "../utils/logger.js";
+import { logInfo, logError, logWarn } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
 
 // GET /api/applications/student
@@ -17,11 +17,20 @@ export const getStudentApplications = async (req, res) => {
 
   try {
     if (req.user.role !== "student") {
+      logWarn('Non-student user attempted to fetch applications', {
+        requestId,
+        userId: req.user.id,
+        role: req.user.role
+      });
       return sendErrorResponse(res, 'AUTH_005', {}, requestId);
     }
 
-    // Optional: validate ObjectId
+    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(req.user.id)) {
+      logWarn('Invalid user ID format when fetching applications', {
+        requestId,
+        userId: req.user.id
+      });
       return sendErrorResponse(res, 'USER_003', {}, requestId);
     }
 
@@ -70,10 +79,36 @@ export const getStudentApplications = async (req, res) => {
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNumber)
-        .lean(),
-      Application.countDocuments(filter),
+        .lean()
+        .catch(err => {
+          logError("Database error when fetching applications", err, {
+            requestId,
+            studentId: req.user.id
+          });
+          throw new Error('DATABASE_ERROR');
+        }),
+      Application.countDocuments(filter)
+        .catch(err => {
+          logError("Database error when counting applications", err, {
+            requestId,
+            studentId: req.user.id
+          });
+          throw new Error('DATABASE_ERROR');
+        }),
       Application.getStatsByStudent(req.user.id)
-    ]);
+        .catch(err => {
+          logError("Database error when fetching student stats", err, {
+            requestId,
+            studentId: req.user.id
+          });
+          throw new Error('DATABASE_ERROR');
+        })
+    ]).catch(err => {
+      if (err.message === 'DATABASE_ERROR') {
+        return sendErrorResponse(res, 'SYS_001', {}, requestId);
+      }
+      throw err;
+    });
 
     // Filter out applications where job didn't match search (if searching)
     const filteredApplications = search 
@@ -85,8 +120,38 @@ export const getStudentApplications = async (req, res) => {
       ...app,
       canWithdraw: app.status === 'pending',
       daysSinceApplication: Math.floor((new Date() - new Date(app.createdAt)) / (1000 * 60 * 60 * 24)),
-      statusHistory: app.statusHistory || []
+      statusHistory: app.statusHistory || [],
+      // Add more detailed information for dashboard
+      jobDetails: app.job ? {
+        id: app.job._id,
+        title: app.job.title,
+        role: app.job.role,
+        location: app.job.location,
+        company: app.job.createdBy ? {
+          name: app.job.createdBy.name,
+          email: app.job.createdBy.email,
+          company: app.job.createdBy.profile?.company
+        } : null
+      } : null
     }));
+
+    // Calculate additional dashboard statistics
+    const recentApplications = enhancedApplications.slice(0, 5); // Get 5 most recent applications
+    
+    // Calculate response rate and success metrics
+    const totalApplications = studentStats.total || 0;
+    const activeApplications = studentStats.pending || 0;
+    const reviewedApplications = studentStats.reviewed || 0;
+    const rejectedApplications = studentStats.rejected || 0;
+    const withdrawnApplications = studentStats.withdrawn || 0;
+    
+    const responseRate = totalApplications > 0 
+      ? ((reviewedApplications + rejectedApplications) / totalApplications * 100).toFixed(1) 
+      : 0;
+      
+    const successRate = (reviewedApplications + rejectedApplications) > 0
+      ? (reviewedApplications / (reviewedApplications + rejectedApplications) * 100).toFixed(1)
+      : 0;
 
     const response = {
       applications: enhancedApplications,
@@ -106,9 +171,19 @@ export const getStudentApplications = async (req, res) => {
       },
       statistics: studentStats,
       summary: {
-        totalApplications: total,
-        activeApplications: studentStats.pending || 0,
-        successRate: total > 0 ? ((studentStats.reviewed || 0) / total * 100).toFixed(1) : 0
+        totalApplications,
+        activeApplications,
+        successRate: parseFloat(successRate),
+        responseRate: parseFloat(responseRate)
+      },
+      insights: {
+        recentApplications,
+        applicationTrends: {
+          active: activeApplications,
+          reviewed: reviewedApplications,
+          rejected: rejectedApplications,
+          withdrawn: withdrawnApplications
+        }
       }
     };
 
@@ -136,6 +211,11 @@ export const getStudentApplications = async (req, res) => {
       return sendErrorResponse(res, 'USER_003', {}, requestId);
     }
     
+    // Handle database connection errors
+    if (error.name === "MongoNetworkError" || error.name === "MongoServerSelectionError") {
+      return sendErrorResponse(res, 'SYS_002', {}, requestId);
+    }
+    
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };
@@ -157,6 +237,11 @@ export const getStudentApplicationStats = async (req, res) => {
 
   try {
     if (req.user.role !== "student") {
+      logWarn('Non-student user attempted to fetch application stats', {
+        requestId,
+        userId: req.user.id,
+        role: req.user.role
+      });
       return sendErrorResponse(res, 'AUTH_005', {}, requestId);
     }
 
@@ -195,9 +280,28 @@ export const getStudentApplicationStats = async (req, res) => {
     ];
 
     const [recentStats, overallStats] = await Promise.all([
-      Application.aggregate(pipeline),
+      Application.aggregate(pipeline)
+        .catch(err => {
+          logError("Database aggregation error when fetching recent stats", err, {
+            requestId,
+            studentId: req.user.id
+          });
+          throw new Error('DATABASE_ERROR');
+        }),
       Application.getStatsByStudent(req.user.id)
-    ]);
+        .catch(err => {
+          logError("Database error when fetching overall stats", err, {
+            requestId,
+            studentId: req.user.id
+          });
+          throw new Error('DATABASE_ERROR');
+        })
+    ]).catch(err => {
+      if (err.message === 'DATABASE_ERROR') {
+        return sendErrorResponse(res, 'SYS_001', {}, requestId);
+      }
+      throw err;
+    });
 
     // Format recent statistics
     const recentSummary = {
@@ -225,6 +329,59 @@ export const getStudentApplicationStats = async (req, res) => {
       ? (overallStats.reviewed / (overallStats.reviewed + overallStats.rejected) * 100).toFixed(1)
       : 0;
 
+    // Calculate application trends over time
+    const trendAnalysis = {
+      dailyApplications: [],
+      weeklyComparison: {
+        currentWeek: 0,
+        previousWeek: 0,
+        change: 0
+      }
+    };
+
+    // Get current week applications
+    const currentWeekStart = new Date();
+    currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+    const currentWeekCount = await Application.countDocuments({
+      student: new mongoose.Types.ObjectId(req.user.id),
+      createdAt: { $gte: currentWeekStart }
+    }).catch(err => {
+      logError("Database error when counting current week applications", err, {
+        requestId,
+        studentId: req.user.id
+      });
+      throw new Error('DATABASE_ERROR');
+    });
+
+    // Get previous week applications
+    const previousWeekStart = new Date(currentWeekStart);
+    previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+    const previousWeekEnd = new Date(currentWeekStart);
+    const previousWeekCount = await Application.countDocuments({
+      student: new mongoose.Types.ObjectId(req.user.id),
+      createdAt: { 
+        $gte: previousWeekStart,
+        $lt: previousWeekEnd
+      }
+    }).catch(err => {
+      logError("Database error when counting previous week applications", err, {
+        requestId,
+        studentId: req.user.id
+      });
+      throw new Error('DATABASE_ERROR');
+    });
+
+    // Calculate trend
+    const trendChange = previousWeekCount > 0 
+      ? ((currentWeekCount - previousWeekCount) / previousWeekCount * 100).toFixed(1)
+      : (currentWeekCount > 0 ? 100 : 0);
+
+    trendAnalysis.weeklyComparison = {
+      currentWeek: currentWeekCount,
+      previousWeek: previousWeekCount,
+      change: parseFloat(trendChange)
+    };
+
     const response = {
       timeframe: {
         days: daysBack,
@@ -240,7 +397,8 @@ export const getStudentApplicationStats = async (req, res) => {
         responseRate: parseFloat(responseRate),
         successRate: parseFloat(successRate),
         averageResponseTime: 'N/A', // Could be calculated if we track response times
-        activeApplications: overallStats.pending || 0
+        activeApplications: overallStats.pending || 0,
+        trendAnalysis
       }
     };
 
@@ -263,6 +421,16 @@ export const getStudentApplicationStats = async (req, res) => {
       requestId,
       studentId: req.user.id
     });
+    
+    if (error.name === "CastError") {
+      return sendErrorResponse(res, 'USER_003', {}, requestId);
+    }
+    
+    // Handle database connection errors
+    if (error.name === "MongoNetworkError" || error.name === "MongoServerSelectionError") {
+      return sendErrorResponse(res, 'SYS_002', {}, requestId);
+    }
+    
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };

@@ -17,13 +17,34 @@ import jobGeneration from "./routes/jobGenAIRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
-// Only import cron jobs in production or if explicitly enabled
-if (process.env.NODE_ENV === 'production' || process.env.ENABLE_CRON === 'true') {
-  import("./cronJobs/autoCleanup.js"); // Importing the auto cleanup job
+// Load environment variables from .env file
+dotenv.config();
+
+// Load local environment variables if .env.local exists (for development overrides)
+// This allows you to override environment variables for local development
+// without modifying the main .env file
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+if (fs.existsSync(path.join(__dirname, ".env.local"))) {
+  dotenv.config({ path: path.join(__dirname, ".env.local") });
+  console.log("Loaded local environment variables from .env.local");
 }
 
-dotenv.config();
+// Validate required environment variables
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`❌ Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
 
 // Add error handling for uncaught exceptions
 process.on('uncaughtException', (err) => {
@@ -73,6 +94,7 @@ app.use("/api/ai", jobGeneration);
 app.use("/api/admin", adminRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // 404 handler
 app.all("*", (req, res) => {

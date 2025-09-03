@@ -981,13 +981,64 @@ export const getBookmarkedJobs = async (req, res) => {
       return sendErrorResponse(res, 'AUTH_005', {}, requestId);
     }
 
-    const jobs = await Job.find({ 
+    // Get query parameters for sorting and filtering
+    const { sortBy = 'createdAt', order = 'desc', search, jobType, location } = req.query;
+    
+    // Build sort options
+    const sortOptions = {};
+    const validSortFields = ['createdAt', 'title', 'applicationDeadline'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    sortOptions[sortField] = order === 'asc' ? 1 : -1;
+
+    // Build filter for jobs
+    const jobFilter = { 
       _id: { $in: req.user.bookmarkedJobs },
       status: "active"
-    })
-    .populate("createdBy", "name email")
-    .populate("company", "name logo")
-    .sort({ createdAt: -1 });
+    };
+
+    // Add search filter if provided
+    if (search) {
+      jobFilter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { role: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+        { desc: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    // Add job type filter if provided
+    if (jobType) {
+      jobFilter.jobType = jobType;
+    }
+
+    // Add location filter if provided
+    if (location) {
+      jobFilter.location = { $regex: location, $options: "i" };
+    }
+
+    const jobs = await Job.find(jobFilter)
+      .populate("createdBy", "name email")
+      .populate("company", "name logo")
+      .sort(sortOptions)
+      .catch(err => {
+        logError("Database error when fetching bookmarked jobs", err, {
+          requestId,
+          userId: req.user.id
+        });
+        throw new Error('DATABASE_ERROR');
+      });
+
+    // Enhance jobs with additional information for dashboard
+    const enhancedJobs = jobs.map(job => ({
+      ...job.toObject(),
+      isBookmarked: true, // All jobs in this list are bookmarked
+      daysUntilDeadline: job.applicationDeadline 
+        ? Math.ceil((new Date(job.applicationDeadline) - new Date()) / (1000 * 60 * 60 * 24))
+        : null,
+      isExpiringSoon: job.applicationDeadline 
+        ? Math.ceil((new Date(job.applicationDeadline) - new Date()) / (1000 * 60 * 60 * 24)) <= 3
+        : false
+    }));
 
     logInfo('Bookmarked jobs fetched successfully', {
       requestId,
@@ -995,12 +1046,27 @@ export const getBookmarkedJobs = async (req, res) => {
       count: jobs.length
     });
 
-    return sendSuccessResponse(res, "Bookmarked jobs fetched successfully", jobs, 200, requestId);
+    return sendSuccessResponse(res, "Bookmarked jobs fetched successfully", enhancedJobs, 200, requestId);
   } catch (error) {
     logError("Get bookmarked jobs error", error, {
       requestId,
       userId: req.user.id
     });
+    
+    if (error.name === "CastError") {
+      return sendErrorResponse(res, 'USER_003', {}, requestId);
+    }
+    
+    // Handle database connection errors
+    if (error.name === "MongoNetworkError" || error.name === "MongoServerSelectionError") {
+      return sendErrorResponse(res, 'SYS_002', {}, requestId);
+    }
+    
+    // Handle custom database errors
+    if (error.message === 'DATABASE_ERROR') {
+      return sendErrorResponse(res, 'SYS_001', {}, requestId);
+    }
+    
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };

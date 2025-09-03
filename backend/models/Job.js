@@ -112,5 +112,58 @@ if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'tru
   jobSchema.index({ applicationDeadline: 1 }, { background: true });
 }
 
+// Static method to get job statistics
+jobSchema.statics.getStats = async function() {
+  const stats = await this.aggregate([
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  const result = {
+    total: 0,
+    active: 0,
+    inactive: 0,
+    expired: 0
+  };
+  
+  stats.forEach(stat => {
+    result[stat._id] = stat.count;
+    result.total += stat.count;
+  });
+  
+  return result;
+};
+
+// Static method to get job statistics by recruiter
+jobSchema.statics.getStatsByRecruiter = async function(recruiterId) {
+  const stats = await this.aggregate([
+    { $match: { createdBy: new mongoose.Types.ObjectId(recruiterId) } },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  const result = {
+    total: 0,
+    active: 0,
+    inactive: 0,
+    expired: 0
+  };
+  
+  stats.forEach(stat => {
+    result[stat._id] = stat.count;
+    result.total += stat.count;
+  });
+  
+  return result;
+};
+
 const Job = mongoose.model("Job", jobSchema);
 export default Job;

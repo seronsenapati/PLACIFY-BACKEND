@@ -184,6 +184,73 @@ applicationSchema.statics.getStatsByStudent = async function(studentId) {
   return result;
 };
 
+// Static method to get application statistics by recruiter
+applicationSchema.statics.getStatsByRecruiter = async function(recruiterId) {
+  const stats = await this.aggregate([
+    {
+      $lookup: {
+        from: "jobs",
+        localField: "job",
+        foreignField: "_id",
+        as: "jobDetails"
+      }
+    },
+    {
+      $match: {
+        "jobDetails.createdBy": new mongoose.Types.ObjectId(recruiterId)
+      }
+    },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  const result = {
+    total: 0,
+    pending: 0,
+    reviewed: 0,
+    rejected: 0,
+    withdrawn: 0
+  };
+  
+  stats.forEach(stat => {
+    result[stat._id] = stat.count;
+    result.total += stat.count;
+  });
+  
+  return result;
+};
+
+// Static method to get overall application statistics
+applicationSchema.statics.getStats = async function() {
+  const stats = await this.aggregate([
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+  
+  const result = {
+    total: 0,
+    pending: 0,
+    reviewed: 0,
+    rejected: 0,
+    withdrawn: 0
+  };
+  
+  stats.forEach(stat => {
+    result[stat._id] = stat.count;
+    result.total += stat.count;
+  });
+  
+  return result;
+};
+
 const Application = mongoose.model("Application", applicationSchema);
 
 export default Application;

@@ -14,7 +14,7 @@ const normalizeEmail = (email) =>
 // REGISTER USER
 export const registerUser = async (req, res) => {
   try {
-    let { name, email, password, username } = req.body; 
+    let { name, email, password, username, role } = req.body; 
     email = normalizeEmail(email);
 
     if (
@@ -56,17 +56,24 @@ export const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Default role to student
-    const role = "student";
+    // Ensure role is properly set
+    // The validation middleware should have already handled this, but we'll double-check
+    const validRoles = ["student", "recruiter"];
+    if (!role || !validRoles.includes(role)) {
+      role = "student"; // Default to student if role is missing or invalid
+    }
 
-    // Create new user
-    const newUser = await User.create({
+    // Explicitly set the role in the data object to avoid undefined values
+    const userData = {
       name,
       email,
-      username, // ✅ root-level username
+      username,
       password: hashedPassword,
-      role,
-    });
+      role: role // This ensures we're explicitly passing the role
+    };
+
+    // Create new user with the role from request body
+    const newUser = await User.create(userData);
 
     // create token
     const token = jwt.sign(
