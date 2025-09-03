@@ -141,7 +141,7 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
     },
-
+    
     // Notification preferences
     notificationPreferences: {
       type: notificationPreferencesSchema,
@@ -155,6 +155,7 @@ const userSchema = new mongoose.Schema(
 // Only create index in production or if explicitly enabled
 if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'true') {
   userSchema.index({ bookmarkedJobs: 1 }, { background: true });
+  userSchema.index({ company: 1 }, { background: true });
 }
 
 const User = mongoose.model("User", userSchema);

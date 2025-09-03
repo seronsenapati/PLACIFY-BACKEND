@@ -79,6 +79,12 @@ export const ERROR_CODES = {
     technicalMessage: 'Recruiter must create company profile before posting jobs',
     httpStatus: 400
   },
+  JOB_005: {
+    code: 'JOB_005',
+    userMessage: 'Application deadline has passed',
+    technicalMessage: 'Cannot apply to job after application deadline',
+    httpStatus: 400
+  },
 
   // Application Management Errors (APP_xxx)
   APP_001: {
@@ -134,7 +140,7 @@ export const ERROR_CODES = {
   COMPANY_002: {
     code: 'COMPANY_002',
     userMessage: 'You are not authorized to modify this company',
-    technicalMessage: 'User is not the creator of this company',
+    technicalMessage: 'User is not the creator of this company or company not found',
     httpStatus: 403
   },
 

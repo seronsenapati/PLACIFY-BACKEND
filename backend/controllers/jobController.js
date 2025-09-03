@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 import Job from "../models/Job.js";
+import Company from "../models/Company.js";
+import Application from "../models/Application.js";
 import { sendResponse, sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
 import validateFields from "../utils/validateFields.js";
 import { validateJobFields } from "../utils/validateAdvancedFields.js";
-import Application from "../models/Application.js";
-import Company from "../models/Company.js";
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
 import { createNewApplicationNotification } from "../utils/notificationHelpers.js";
@@ -23,7 +23,7 @@ export const createJob = async (req, res) => {
 
   try {
     const { isValid, missingFields } = validateFields(
-      ["title", "role", "desc", "location", "salary"],
+      ["title", "role", "desc", "location", "salary", "company"],
       req.body
     );
 
@@ -45,7 +45,11 @@ export const createJob = async (req, res) => {
       location,
       skills = [],
       jobType = "internship",
-      expiresAt
+      expiresAt,
+      applicationDeadline,
+      experienceLevel = "entry",
+      isRemote = false,
+      company: companyId
     } = {
       role: xss(req.body.role),
       desc: xss(req.body.desc),
@@ -54,7 +58,11 @@ export const createJob = async (req, res) => {
       location: xss(req.body.location),
       skills: Array.isArray(req.body.skills) ? req.body.skills.map(skill => xss(skill)) : [],
       jobType: xss(req.body.jobType) || "internship",
-      expiresAt: req.body.expiresAt
+      expiresAt: req.body.expiresAt,
+      applicationDeadline: req.body.applicationDeadline,
+      experienceLevel: req.body.experienceLevel || "entry",
+      isRemote: req.body.isRemote || false,
+      company: req.body.company
     };
 
     const validJobTypes = ["internship", "full-time", "part-time", "contract"];
@@ -70,6 +78,34 @@ export const createJob = async (req, res) => {
       }, requestId);
     }
 
+    const validExperienceLevels = ["entry", "mid", "senior", "lead"];
+    if (!validExperienceLevels.includes(experienceLevel)) {
+      logWarn('Job creation failed - invalid experience level', {
+        requestId,
+        userId: req.user.id,
+        experienceLevel
+      });
+      return sendErrorResponse(res, 'VAL_002', { 
+        message: "Invalid experience level",
+        validTypes: validExperienceLevels
+      }, requestId);
+    }
+
+    // Validate company exists and belongs to user
+    const company = await Company.findOne({ 
+      _id: companyId,
+      createdBy: req.user.id 
+    });
+
+    if (!company) {
+      logWarn('Job creation failed - company not found or not owned by user', {
+        requestId,
+        userId: req.user.id,
+        companyId
+      });
+      return sendErrorResponse(res, 'COMPANY_002', {}, requestId);
+    }
+
     const fieldErrors = validateJobFields({ role, desc, salary });
     if (fieldErrors.length > 0) {
       logWarn('Job creation failed - validation errors', {
@@ -83,18 +119,13 @@ export const createJob = async (req, res) => {
       }, requestId);
     }
 
-    const company = await Company.findOne({ createdBy: req.user.id });
-
-    if (!company) {
-      logWarn('Job creation failed - no company found', {
-        requestId,
-        userId: req.user.id
-      });
-      return sendErrorResponse(res, 'JOB_004', {}, requestId);
-    }
-
     // Set default expiration date to 30 days from now if not provided
     const jobExpiresAt = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    
+    // Set default application deadline to 7 days before expiration if not provided
+    const jobApplicationDeadline = applicationDeadline ? 
+      new Date(applicationDeadline) : 
+      new Date(jobExpiresAt.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     const newJob = await Job.create({
       title,
@@ -104,8 +135,12 @@ export const createJob = async (req, res) => {
       salary,
       skills,
       jobType,
+      experienceLevel,
+      isRemote,
       expiresAt: jobExpiresAt,
+      applicationDeadline: jobApplicationDeadline,
       createdBy: req.user.id,
+      company: companyId
     });
 
     company.jobs.push(newJob._id);
@@ -149,7 +184,10 @@ export const getAllJobs = async (req, res) => {
       order,
       page = 1,
       limit = 10,
-      status = "active"
+      status = "active",
+      experienceLevel,
+      isRemote,
+      companyId
     } = req.query;
 
     const filter = { status };
@@ -176,6 +214,22 @@ export const getAllJobs = async (req, res) => {
       if (maxSalary) filter.salary.$lte = Number(maxSalary);
     }
 
+    // Experience level filter
+    const validExperienceLevels = ["entry", "mid", "senior", "lead"];
+    if (experienceLevel && validExperienceLevels.includes(experienceLevel)) {
+      filter.experienceLevel = experienceLevel;
+    }
+
+    // Remote work filter
+    if (isRemote !== undefined) {
+      filter.isRemote = isRemote === 'true';
+    }
+
+    // Company filter
+    if (companyId) {
+      filter.company = companyId;
+    }
+
     // Exclude expired jobs unless explicitly requested
     if (status === "active") {
       filter.$or = [
@@ -183,6 +237,16 @@ export const getAllJobs = async (req, res) => {
         { expiresAt: { $gte: new Date() } }
       ];
     }
+
+    // Exclude jobs with passed application deadlines
+    filter.$and = [
+      {
+        $or: [
+          { applicationDeadline: { $exists: false } },
+          { applicationDeadline: { $gte: new Date() } }
+        ]
+      }
+    ];
 
     const sortOptions = {};
     if (sortBy) {
@@ -193,6 +257,7 @@ export const getAllJobs = async (req, res) => {
 
     const jobs = await Job.find(filter)
       .populate("createdBy", "name email")
+      .populate("company", "name logo")
       .sort(sortOptions || { createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
@@ -264,6 +329,40 @@ export const updateJob = async (req, res) => {
       }
     }
 
+    if (sanitizedBody.experienceLevel) {
+      const validExperienceLevels = ["entry", "mid", "senior", "lead"];
+      if (!validExperienceLevels.includes(sanitizedBody.experienceLevel)) {
+        logWarn('Job update failed - invalid experience level', {
+          requestId,
+          jobId,
+          userId: req.user.id,
+          experienceLevel: sanitizedBody.experienceLevel
+        });
+        return sendErrorResponse(res, 'VAL_002', { 
+          message: "Invalid experience level",
+          validTypes: validExperienceLevels
+        }, requestId);
+      }
+    }
+
+    // If updating company, validate ownership
+    if (sanitizedBody.company) {
+      const company = await Company.findOne({ 
+        _id: sanitizedBody.company,
+        createdBy: req.user.id 
+      });
+
+      if (!company) {
+        logWarn('Job update failed - company not found or not owned by user', {
+          requestId,
+          jobId,
+          userId: req.user.id,
+          companyId: sanitizedBody.company
+        });
+        return sendErrorResponse(res, 'COMPANY_002', {}, requestId);
+      }
+    }
+
     const updatedJob = await Job.findOneAndUpdate(
       { _id: jobId, createdBy: req.user.id },
       sanitizedBody,
@@ -323,6 +422,12 @@ export const deleteJob = async (req, res) => {
       return sendErrorResponse(res, 'JOB_002', {}, requestId);
     }
 
+    // Remove job from company's jobs array
+    await Company.updateOne(
+      { _id: deletedJob.company },
+      { $pull: { jobs: jobId } }
+    );
+
     logInfo('Job deleted successfully', {
       requestId,
       jobId,
@@ -352,10 +457,9 @@ export const getJobById = async (req, res) => {
   });
 
   try {
-    const job = await Job.findById(jobId).populate(
-      "createdBy",
-      "name email role"
-    );
+    const job = await Job.findById(jobId)
+      .populate("createdBy", "name email role")
+      .populate("company", "name desc website logo");
 
     if (!job) {
       logWarn('Job not found', {
@@ -497,6 +601,19 @@ export const applyToJob = async (req, res) => {
       }, requestId);
     }
 
+    // Check if application deadline has passed
+    if (job.applicationDeadline && job.applicationDeadline < new Date()) {
+      logWarn('Job application failed - application deadline passed', {
+        requestId,
+        jobId,
+        studentId: req.user.id,
+        applicationDeadline: job.applicationDeadline
+      });
+      return sendErrorResponse(res, 'JOB_001', { 
+        message: "The application deadline for this job has passed"
+      }, requestId);
+    }
+
     const alreadyApplied = await Application.findOne({
       job: jobId,
       student: req.user.id,
@@ -604,7 +721,9 @@ export const applyToJob = async (req, res) => {
             id: job._id,
             title: job.title,
             role: job.role,
-            company: job.createdBy.name
+            company: {
+              name: job.createdBy.name
+            }
           }
         }
       },
@@ -642,7 +761,9 @@ export const getRecruiterJobs = async (req, res) => {
       order,
       page = 1,
       limit = 10,
-      status
+      status,
+      experienceLevel,
+      isRemote
     } = req.query;
 
     const filter = { createdBy: req.user.id };
@@ -673,6 +794,17 @@ export const getRecruiterJobs = async (req, res) => {
       if (maxSalary) filter.salary.$lte = Number(maxSalary);
     }
 
+    // Experience level filter
+    const validExperienceLevels = ["entry", "mid", "senior", "lead"];
+    if (experienceLevel && validExperienceLevels.includes(experienceLevel)) {
+      filter.experienceLevel = experienceLevel;
+    }
+
+    // Remote work filter
+    if (isRemote !== undefined) {
+      filter.isRemote = isRemote === 'true';
+    }
+
     const sortOptions = {};
     if (sortBy) {
       sortOptions[sortBy] = order === "asc" ? 1 : -1;
@@ -682,6 +814,7 @@ export const getRecruiterJobs = async (req, res) => {
 
     const jobs = await Job.find(filter)
       .populate("createdBy", "name email")
+      .populate("company", "name logo")
       .sort(sortOptions || { createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
@@ -744,6 +877,17 @@ export const getJobStats = async (req, res) => {
       }
     ]);
     
+    // Get jobs by experience level
+    const jobsByExperience = await Job.aggregate([
+      { $match: { createdBy: new mongoose.Types.ObjectId(req.user.id) } },
+      {
+        $group: {
+          _id: "$experienceLevel",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
     // Get recent applications for recruiter's jobs
     const recentApplications = await Application.aggregate([
       {
@@ -795,6 +939,10 @@ export const getJobStats = async (req, res) => {
         acc[item._id] = item.count;
         return acc;
       }, {}),
+      jobsByExperience: jobsByExperience.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
       recentApplications
     };
 
@@ -807,6 +955,49 @@ export const getJobStats = async (req, res) => {
     return sendSuccessResponse(res, "Job statistics fetched successfully", stats, 200, requestId);
   } catch (error) {
     logError("Get job statistics error", error, {
+      requestId,
+      userId: req.user.id
+    });
+    return sendErrorResponse(res, 'SYS_001', {}, requestId);
+  }
+};
+
+// Get bookmarked jobs for student
+export const getBookmarkedJobs = async (req, res) => {
+  const requestId = uuidv4();
+  
+  logInfo('Fetching bookmarked jobs', {
+    requestId,
+    userId: req.user.id
+  });
+
+  try {
+    if (req.user.role !== "student") {
+      logWarn('Non-student user attempted to get bookmarked jobs', {
+        requestId,
+        userId: req.user.id,
+        role: req.user.role
+      });
+      return sendErrorResponse(res, 'AUTH_005', {}, requestId);
+    }
+
+    const jobs = await Job.find({ 
+      _id: { $in: req.user.bookmarkedJobs },
+      status: "active"
+    })
+    .populate("createdBy", "name email")
+    .populate("company", "name logo")
+    .sort({ createdAt: -1 });
+
+    logInfo('Bookmarked jobs fetched successfully', {
+      requestId,
+      userId: req.user.id,
+      count: jobs.length
+    });
+
+    return sendSuccessResponse(res, "Bookmarked jobs fetched successfully", jobs, 200, requestId);
+  } catch (error) {
+    logError("Get bookmarked jobs error", error, {
       requestId,
       userId: req.user.id
     });

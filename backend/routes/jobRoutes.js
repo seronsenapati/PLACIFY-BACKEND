@@ -8,7 +8,8 @@ import {
   getJobById,
   applyToJob,
   getRecruiterJobs,
-  getJobStats
+  getJobStats,
+  getBookmarkedJobs
 } from "../controllers/jobController.js";
 import protect from "../middleware/authMiddleware.js";
 import validateRequest from "../middleware/validate.js";
@@ -36,7 +37,10 @@ router.post(
     body("location").notEmpty().withMessage("Location is required").trim(),
     body("salary").isNumeric().withMessage("Salary must be a number"),
     body("skills").optional().isArray().withMessage("Skills must be an array"),
-    body("expiresAt").optional().isISO8601().withMessage("Expiration date must be a valid date")
+    body("expiresAt").optional().isISO8601().withMessage("Expiration date must be a valid date"),
+    body("applicationDeadline").optional().isISO8601().withMessage("Application deadline must be a valid date"),
+    body("experienceLevel").optional().isIn(["entry", "mid", "senior", "lead"]).withMessage("Invalid experience level"),
+    body("company").notEmpty().withMessage("Company is required").isMongoId().withMessage("Company must be a valid ID")
   ],
   validateRequest,
   createJob
@@ -76,7 +80,10 @@ router.patch(
     body("skills").optional().isArray().withMessage("Skills must be an array"),
     body("jobType").optional().isIn(["internship", "full-time", "part-time", "contract"]).withMessage("Invalid job type"),
     body("expiresAt").optional().isISO8601().withMessage("Expiration date must be a valid date"),
-    body("status").optional().isIn(["active", "inactive", "expired"]).withMessage("Invalid status")
+    body("applicationDeadline").optional().isISO8601().withMessage("Application deadline must be a valid date"),
+    body("status").optional().isIn(["active", "inactive", "expired"]).withMessage("Invalid status"),
+    body("experienceLevel").optional().isIn(["entry", "mid", "senior", "lead"]).withMessage("Invalid experience level"),
+    body("company").optional().isMongoId().withMessage("Company must be a valid ID")
   ],
   validateRequest,
   updateJob
@@ -143,6 +150,19 @@ router.get(
   isRecruiterOrAdmin,
   generalApiLimiter,
   getJobStats
+);
+
+/**
+ * @route   GET /api/jobs/student/bookmarks
+ * @desc    Get bookmarked jobs for student
+ * @access  Private (Students only)
+ */
+router.get(
+  "/student/bookmarks",
+  protect,
+  isStudent,
+  generalApiLimiter,
+  getBookmarkedJobs
 );
 
 export default router;

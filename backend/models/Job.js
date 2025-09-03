@@ -65,6 +65,33 @@ const jobSchema = new mongoose.Schema(
       enum: ["active", "inactive", "expired"],
       default: "active",
       index: true
+    },
+    // Add application deadline
+    applicationDeadline: {
+      type: Date,
+      validate: {
+        validator: function(deadline) {
+          return !deadline || (this.expiresAt && deadline <= this.expiresAt);
+        },
+        message: "Application deadline must be before or equal to job expiration date"
+      }
+    },
+    // Add experience level
+    experienceLevel: {
+      type: String,
+      enum: ["entry", "mid", "senior", "lead"],
+      default: "entry"
+    },
+    // Add remote work option
+    isRemote: {
+      type: Boolean,
+      default: false
+    },
+    // Add company reference
+    company: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Company",
+      required: true
     }
   },
   { timestamps: true }
@@ -78,6 +105,11 @@ if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'tru
   jobSchema.index({ skills: 1 }, { background: true });
   jobSchema.index({ createdAt: -1 }, { background: true });
   jobSchema.index({ expiresAt: 1, status: 1 }, { background: true });
+  // Add new indexes for enhanced search capabilities
+  jobSchema.index({ company: 1 }, { background: true });
+  jobSchema.index({ experienceLevel: 1 }, { background: true });
+  jobSchema.index({ isRemote: 1 }, { background: true });
+  jobSchema.index({ applicationDeadline: 1 }, { background: true });
 }
 
 const Job = mongoose.model("Job", jobSchema);
