@@ -62,7 +62,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: "*", // Optional: Replace with frontend domain after deployment
+    origin: [process.env.FRONTEND_URL || "http://localhost:5173", "https://placify-frontend.vercel.app"],
     credentials: true,
   })
 );
