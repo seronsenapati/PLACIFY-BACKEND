@@ -48,12 +48,12 @@ export const getJobApplications = async (req, res) => {
     }
 
     // Search filter (search in student name or email)
-    let studentFilter = {};
+    let studentMatch = {};
     if (search) {
-      studentFilter = {
+      studentMatch = {
         $or: [
-          { 'student.name': { $regex: search, $options: 'i' } },
-          { 'student.email': { $regex: search, $options: 'i' } }
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
         ]
       };
     }
@@ -75,12 +75,7 @@ export const getJobApplications = async (req, res) => {
         .populate({
           path: "student", 
           select: "name email profile.avatar",
-          match: search ? {
-            $or: [
-              { name: { $regex: search, $options: 'i' } },
-              { email: { $regex: search, $options: 'i' } }
-            ]
-          } : {}
+          match: studentMatch
         })
         .sort(sortOptions)
         .skip(skip)
@@ -95,8 +90,19 @@ export const getJobApplications = async (req, res) => {
       ? applications.filter(app => app.student) 
       : applications;
 
+    // Enhance applications with additional computed fields
+    const enhancedApplications = filteredApplications.map(app => ({
+      ...app,
+      canReview: app.status === 'pending',
+      daysSinceApplication: Math.floor((new Date() - new Date(app.createdAt)) / (1000 * 60 * 60 * 24)),
+      // Add a simplified status history for quick view
+      latestStatusUpdate: app.statusHistory && app.statusHistory.length > 0 
+        ? app.statusHistory[app.statusHistory.length - 1] 
+        : null
+    }));
+
     const response = {
-      applications: filteredApplications,
+      applications: enhancedApplications,
       pagination: {
         total,
         page: pageNumber,
@@ -126,7 +132,7 @@ export const getJobApplications = async (req, res) => {
       jobId,
       recruiterId: req.user.id,
       totalApplications: total,
-      returnedCount: filteredApplications.length
+      returnedCount: enhancedApplications.length
     });
 
     return sendSuccessResponse(

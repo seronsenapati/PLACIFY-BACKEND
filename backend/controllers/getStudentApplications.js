@@ -132,7 +132,11 @@ export const getStudentApplications = async (req, res) => {
           email: app.job.createdBy.email,
           company: app.job.createdBy.profile?.company
         } : null
-      } : null
+      } : null,
+      // Add a simplified status history for quick view
+      latestStatusUpdate: app.statusHistory && app.statusHistory.length > 0 
+        ? app.statusHistory[app.statusHistory.length - 1] 
+        : null
     }));
 
     // Calculate additional dashboard statistics

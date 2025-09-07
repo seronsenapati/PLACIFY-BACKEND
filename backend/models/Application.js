@@ -251,6 +251,29 @@ applicationSchema.statics.getStats = async function() {
   return result;
 };
 
+// Add a method to get application timeline for better tracking
+applicationSchema.statics.getApplicationTimeline = async function(applicationId) {
+  const application = await this.findById(applicationId)
+    .populate('student', 'name email')
+    .populate('job', 'title role')
+    .lean();
+    
+  if (!application) return null;
+  
+  return {
+    id: application._id,
+    job: application.job,
+    student: application.student,
+    status: application.status,
+    createdAt: application.createdAt,
+    updatedAt: application.updatedAt,
+    statusHistory: application.statusHistory || [],
+    withdrawnAt: application.withdrawnAt,
+    reviewedAt: application.reviewedAt,
+    rejectedAt: application.rejectedAt
+  };
+};
+
 const Application = mongoose.model("Application", applicationSchema);
 
 export default Application;

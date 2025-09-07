@@ -475,16 +475,33 @@ export const getJobById = async (req, res) => {
       return sendErrorResponse(res, 'JOB_001', {}, requestId);
     }
 
-    // Check if job is expired
+    // Check if job is expired and update status if needed
     if (job.expiresAt && job.expiresAt < new Date() && job.status !== 'expired') {
       job.status = 'expired';
       await job.save();
+      
+      // Create notification for recruiter about job expiration
+      try {
+        await createJobExpiredNotification(
+          job.createdBy._id,
+          job.title,
+          { jobId: job._id }
+        );
+      } catch (notificationError) {
+        logError('Failed to create job expired notification', notificationError, {
+          requestId,
+          jobId: job._id,
+          recruiterId: job.createdBy._id
+        });
+        // Don't fail the request if notification fails
+      }
     }
 
     logInfo('Job fetched successfully', {
       requestId,
       jobId,
-      userId: req.user?.id
+      userId: req.user?.id,
+      status: job.status
     });
 
     return sendSuccessResponse(res, "Job fetched successfully", job, 200, requestId);
@@ -606,17 +623,34 @@ export const applyToJob = async (req, res) => {
       }, requestId);
     }
 
-    // Check if application deadline has passed
-    if (job.applicationDeadline && job.applicationDeadline < new Date()) {
-      logWarn('Job application failed - application deadline passed', {
-        requestId,
-        jobId,
-        studentId: req.user.id,
-        applicationDeadline: job.applicationDeadline
-      });
-      return sendErrorResponse(res, 'JOB_001', { 
-        message: "The application deadline for this job has passed"
-      }, requestId);
+    // Check if application deadline has passed with more comprehensive validation
+    const now = new Date();
+    if (job.applicationDeadline) {
+      // Ensure application deadline is not in the past
+      if (job.applicationDeadline < now) {
+        logWarn('Job application failed - application deadline passed', {
+          requestId,
+          jobId,
+          studentId: req.user.id,
+          applicationDeadline: job.applicationDeadline,
+          currentTime: now
+        });
+        return sendErrorResponse(res, 'JOB_005', {}, requestId);
+      }
+      
+      // Ensure application deadline is not after job expiration date
+      if (job.expiresAt && job.applicationDeadline > job.expiresAt) {
+        logWarn('Job application failed - application deadline after job expiration', {
+          requestId,
+          jobId,
+          studentId: req.user.id,
+          applicationDeadline: job.applicationDeadline,
+          expiresAt: job.expiresAt
+        });
+        return sendErrorResponse(res, 'VAL_002', { 
+          message: "Application deadline cannot be after job expiration date"
+        }, requestId);
+      }
     }
 
     const alreadyApplied = await Application.findOne({
@@ -714,6 +748,7 @@ export const applyToJob = async (req, res) => {
       // Don't fail the request if notification fails
     }
 
+    // Return enhanced response with more application details
     return sendSuccessResponse(
       res,
       "Application submitted successfully",
@@ -722,6 +757,8 @@ export const applyToJob = async (req, res) => {
           id: application._id,
           status: application.status,
           submittedAt: application.createdAt,
+          resumeUrl: application.resumeUrl,
+          coverLetter: application.coverLetter,
           job: {
             id: job._id,
             title: job.title,
@@ -893,6 +930,17 @@ export const getJobStats = async (req, res) => {
       }
     ]);
     
+    // Get jobs by remote work option
+    const jobsByRemote = await Job.aggregate([
+      { $match: { createdBy: new mongoose.Types.ObjectId(req.user.id) } },
+      {
+        $group: {
+          _id: "$isRemote",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
     // Get recent applications for recruiter's jobs
     const recentApplications = await Application.aggregate([
       {
@@ -933,6 +981,64 @@ export const getJobStats = async (req, res) => {
         }
       }
     ]);
+    
+    // Get application statistics by status
+    const applicationStats = await Application.aggregate([
+      {
+        $lookup: {
+          from: "jobs",
+          localField: "job",
+          foreignField: "_id",
+          as: "jobDetails"
+        }
+      },
+      {
+        $match: {
+          "jobDetails.createdBy": new mongoose.Types.ObjectId(req.user.id)
+        }
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Get applications over time (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const applicationsOverTime = await Application.aggregate([
+      {
+        $lookup: {
+          from: "jobs",
+          localField: "job",
+          foreignField: "_id",
+          as: "jobDetails"
+        }
+      },
+      {
+        $match: {
+          "jobDetails.createdBy": new mongoose.Types.ObjectId(req.user.id),
+          createdAt: { $gte: thirtyDaysAgo }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$createdAt"
+            }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { _id: 1 }
+      }
+    ]);
 
     const stats = {
       totalJobs,
@@ -948,7 +1054,16 @@ export const getJobStats = async (req, res) => {
         acc[item._id] = item.count;
         return acc;
       }, {}),
-      recentApplications
+      jobsByRemote: jobsByRemote.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      recentApplications,
+      applicationStats: applicationStats.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {}),
+      applicationsOverTime
     };
 
     logInfo('Job statistics fetched successfully', {
@@ -984,6 +1099,11 @@ export const getBookmarkedJobs = async (req, res) => {
         role: req.user.role
       });
       return sendErrorResponse(res, 'AUTH_005', {}, requestId);
+    }
+
+    // Ensure bookmarkedJobs is initialized as an array
+    if (!Array.isArray(req.user.bookmarkedJobs)) {
+      req.user.bookmarkedJobs = [];
     }
 
     // Get query parameters for sorting and filtering

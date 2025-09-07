@@ -12,7 +12,8 @@ import {
 import { 
   updateApplicationStatus, 
   withdrawApplication, 
-  getApplicationAnalytics 
+  getApplicationAnalytics,
+  getApplicationTimeline
 } from "../controllers/applicationController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -117,8 +118,8 @@ router.patch(
   validateObjectId("id"),
   [
     body("status")
-      .isIn(["reviewed", "rejected"])
-      .withMessage("Status must be either 'reviewed' or 'rejected'"),
+      .isIn(["pending", "reviewed", "rejected", "withdrawn"])
+      .withMessage("Status must be either 'pending', 'reviewed', 'rejected', or 'withdrawn'"),
     body("reason")
       .optional()
       .isLength({ max: 500 })
@@ -166,6 +167,14 @@ router.get(
   ],
   validateRequest,
   getApplicationAnalytics
+);
+
+// Get application timeline (accessible by student or recruiter owner)
+router.get(
+  "/:id/timeline",
+  protect,
+  validateObjectId("id"),
+  getApplicationTimeline
 );
 
 export default router;

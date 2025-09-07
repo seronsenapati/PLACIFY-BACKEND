@@ -102,7 +102,7 @@ export const ERROR_CODES = {
   APP_003: {
     code: 'APP_003',
     userMessage: 'Invalid application status',
-    technicalMessage: 'Status must be one of: pending, reviewed, rejected',
+    technicalMessage: 'Status must be one of: pending, reviewed, rejected, withdrawn',
     httpStatus: 400
   },
   APP_004: {

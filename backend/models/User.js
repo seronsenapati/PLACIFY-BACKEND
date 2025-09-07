@@ -189,6 +189,12 @@ const userSchema = new mongoose.Schema(
       type: notificationPreferencesSchema,
       default: () => ({})
     },
+    
+    // Bookmarked jobs for students
+    bookmarkedJobs: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job"
+    }]
   },
   { timestamps: true }
 );

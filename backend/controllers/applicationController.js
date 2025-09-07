@@ -9,7 +9,7 @@ import { logInfo, logError } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
 
 // Allowed status values for application updates
-const ALLOWED_STATUSES = ["reviewed", "rejected"];
+const ALLOWED_STATUSES = ["pending", "reviewed", "rejected", "withdrawn"];
 
 /**
  * @desc Update application status (by recruiter)
@@ -31,6 +31,13 @@ export const updateApplicationStatus = async (req, res) => {
   // ✅ Validate status value
   if (!ALLOWED_STATUSES.includes(status)) {
     return sendErrorResponse(res, 'APP_003', { allowedStatuses: ALLOWED_STATUSES }, requestId);
+  }
+
+  // ✅ Prevent recruiters from directly setting status to "withdrawn" (this is student-only)
+  if (status === "withdrawn") {
+    return sendErrorResponse(res, 'APP_003', { 
+      message: "Recruiters cannot set application status to withdrawn. Applicants must withdraw their own applications."
+    }, requestId);
   }
 
   // ✅ Validate MongoDB ObjectId
@@ -70,7 +77,11 @@ export const updateApplicationStatus = async (req, res) => {
     application._statusUpdatedBy = req.user.id;
     application.status = status;
     if (reason) {
-      application.statusHistory[application.statusHistory.length - 1].reason = reason;
+      // Add reason to the latest status history entry
+      const latestHistory = application.statusHistory[application.statusHistory.length - 1];
+      if (latestHistory) {
+        latestHistory.reason = reason;
+      }
     }
     await application.save();
 
@@ -296,6 +307,81 @@ export const getApplicationAnalytics = async (req, res) => {
     logError("Application analytics error", error, {
       requestId,
       recruiterId: req.user.id
+    });
+    return sendErrorResponse(res, 'SYS_001', {}, requestId);
+  }
+};
+
+/**
+ * @desc Get application timeline/details for better tracking
+ * @route GET /api/applications/:id/timeline
+ * @access Student or Recruiter (owner of application/job)
+ */
+export const getApplicationTimeline = async (req, res) => {
+  const requestId = uuidv4();
+  const { id: applicationId } = req.params;
+
+  logInfo('Application timeline requested', {
+    requestId,
+    applicationId,
+    userId: req.user.id,
+    userRole: req.user.role
+  });
+
+  // ✅ Validate MongoDB ObjectId
+  if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+    return sendErrorResponse(res, 'APP_006', {}, requestId);
+  }
+
+  try {
+    // Get application timeline from model method
+    const timeline = await Application.getApplicationTimeline(applicationId);
+    
+    if (!timeline) {
+      return sendErrorResponse(res, 'APP_001', {}, requestId);
+    }
+
+    // Check permissions
+    const isStudent = req.user.role === 'student' && timeline.student._id.toString() === req.user.id;
+    const isRecruiter = req.user.role === 'recruiter';
+
+    if (!isStudent && !isRecruiter) {
+      return sendErrorResponse(res, 'AUTH_005', {}, requestId);
+    }
+
+    // For recruiters, verify they own the job
+    if (isRecruiter) {
+      // We would need to populate the job creator to check this
+      const application = await Application.findById(applicationId).populate({
+        path: 'job',
+        populate: {
+          path: 'createdBy'
+        }
+      });
+      
+      if (!application || application.job.createdBy._id.toString() !== req.user.id) {
+        return sendErrorResponse(res, 'APP_004', {}, requestId);
+      }
+    }
+
+    logInfo('Application timeline retrieved successfully', {
+      requestId,
+      applicationId,
+      userId: req.user.id
+    });
+
+    return sendSuccessResponse(
+      res,
+      "Application timeline retrieved successfully",
+      timeline,
+      200,
+      requestId
+    );
+  } catch (error) {
+    logError("Application timeline error", error, {
+      requestId,
+      applicationId,
+      userId: req.user.id
     });
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
