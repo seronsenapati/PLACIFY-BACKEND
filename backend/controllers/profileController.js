@@ -71,123 +71,82 @@ function validateEducation(education) {
     return [];
   }
 
-  console.log("Validating education data:", education);
-
-  const validated = education
-    .filter((edu) => {
-      const isValid = edu && typeof edu === "object";
-      if (!isValid) console.log("Filtering out invalid education entry:", edu);
-      return isValid;
-    })
+  return education
+    .filter((edu) => edu && typeof edu === "object")
     .map((edu) => {
-      const cleaned = {
-        degree: typeof edu.degree === "string" ? edu.degree.trim() : "",
-        // Use 'school' field consistently as per memory requirements
-        school:
-          typeof edu.school === "string"
-            ? edu.school.trim()
-            : typeof edu.institution === "string"
-            ? edu.institution.trim()
-            : "",
-        fromYear: parseInt(edu.fromYear) || 0,
-        toYear: edu.toYear ? parseInt(edu.toYear) : null,
-      };
-
-      // Validate parsed fromYear is not NaN as per memory requirements
-      if (isNaN(cleaned.fromYear)) {
-        cleaned.fromYear = 0;
+      // Validate required fields
+      if (!edu.school || typeof edu.school !== "string") {
+        console.log("Education validation: Invalid school field");
+        throw new Error("School field is required and must be a string");
       }
 
-      // Validate parsed toYear is not NaN as per memory requirements
-      if (cleaned.toYear && isNaN(cleaned.toYear)) {
-        cleaned.toYear = null;
+      if (!edu.degree || typeof edu.degree !== "string") {
+        console.log("Education validation: Invalid degree field");
+        throw new Error("Degree field is required and must be a string");
       }
 
-      // Additional validation
-      if (cleaned.toYear && cleaned.toYear < cleaned.fromYear) {
-        console.log("Invalid toYear detected, resetting:", cleaned);
-        cleaned.toYear = null; // Reset invalid toYear
-      }
-
-      return cleaned;
-    })
-    .filter((edu) => {
-      const isValid =
-        edu.degree &&
-        edu.degree.length > 0 &&
-        edu.school &&
-        edu.school.length > 0 &&
-        edu.fromYear &&
-        edu.fromYear >= 1950 &&
-        edu.fromYear <= new Date().getFullYear() + 5;
-      if (!isValid) {
-        console.log("Filtering out invalid education after cleaning:", edu);
-      }
-      return isValid;
-    });
-
-  console.log("Education validation complete:", {
-    original: education.length,
-    validated: validated.length,
-    result: validated,
-  });
-
-  return validated;
-}
-
-// Validate and sanitize skills array
-function validateSkills(skills) {
-  if (!Array.isArray(skills)) return [];
-
-  return skills
-    .map((skill) => (typeof skill === "string" ? skill.trim() : ""))
-    .filter((skill) => skill && skill.length > 0 && skill.length <= 50) // Limit skill length
-    .slice(0, 50); // Limit number of skills
-}
-
-// Validate and sanitize social profiles
-function validateSocialProfiles(socialProfiles) {
-  if (!socialProfiles || typeof socialProfiles !== "object") return {};
-
-  const allowedFields = ["linkedin", "github", "x", "instagram", "website"];
-  const cleaned = {};
-
-  allowedFields.forEach((field) => {
-    if (socialProfiles[field] && typeof socialProfiles[field] === "string") {
-      const cleanedValue = socialProfiles[field].trim();
       if (
-        cleanedValue &&
-        cleanedValue.length > 0 &&
-        cleanedValue.length <= 500
+        !edu.fromYear ||
+        typeof edu.fromYear !== "number" ||
+        edu.fromYear < 1900 ||
+        edu.fromYear > new Date().getFullYear() + 5
       ) {
-        cleaned[field] = cleanedValue;
+        console.log("Education validation: Invalid fromYear field");
+        throw new Error(
+          "From year is required and must be a valid year between 1900 and " +
+            (new Date().getFullYear() + 5)
+        );
       }
-    }
-  });
 
-  return cleaned;
+      // Validate toYear if provided
+      if (
+        edu.toYear !== undefined &&
+        (typeof edu.toYear !== "number" ||
+          edu.toYear < edu.fromYear ||
+          edu.toYear > new Date().getFullYear() + 5)
+      ) {
+        console.log("Education validation: Invalid toYear field");
+        throw new Error(
+          "To year must be a valid year between fromYear and " +
+            (new Date().getFullYear() + 5)
+        );
+      }
+
+      return {
+        school: edu.school.trim(),
+        degree: edu.degree.trim(),
+        fromYear: edu.fromYear,
+        toYear: edu.toYear, // Will be undefined if not provided
+      };
+    });
 }
 
-// Validate about object
 function validateAbout(about) {
   if (!about || typeof about !== "object") {
-    throw new Error("About information is required");
+    console.log("About validation: Not an object, returning null");
+    return null;
   }
 
-  const required = ["gender", "location", "primaryRole"];
-  const missing = required.filter(
-    (field) =>
-      !about[field] ||
-      typeof about[field] !== "string" ||
-      about[field].trim().length === 0
-  );
-
-  if (missing.length > 0) {
-    throw new Error(`Missing required fields in about: ${missing.join(", ")}`);
+  // Validate required fields
+  if (!about.gender || typeof about.gender !== "string") {
+    console.log("About validation: Invalid gender field");
+    throw new Error("Gender field is required and must be a string");
   }
 
+  if (!about.location || typeof about.location !== "string") {
+    console.log("About validation: Invalid location field");
+    throw new Error("Location field is required and must be a string");
+  }
+
+  if (!about.primaryRole || typeof about.primaryRole !== "string") {
+    console.log("About validation: Invalid primaryRole field");
+    throw new Error("Primary role field is required and must be a string");
+  }
+
+  // Validate experience
   const experience = parseInt(about.experience);
   if (isNaN(experience) || experience < 0 || experience > 70) {
+    console.log("About validation: Invalid experience field");
     throw new Error("Experience must be a valid number between 0 and 70");
   }
 
@@ -223,6 +182,7 @@ export const getProfile = async (req, res) => {
       return sendResponse(res, 200, true, "Profile fetched", {
         ...user.toObject(),
         company: company || null,
+        recruiterSettings: user.recruiterSettings || {}
       });
     }
 
@@ -235,311 +195,182 @@ export const getProfile = async (req, res) => {
 
     return sendResponse(res, 200, true, "Profile fetched", user);
   } catch (err) {
-    console.error("Get Profile Error:", {
-      message: err.message,
-      stack: err.stack,
-      userId: req.user?._id,
-    });
-    return sendResponse(res, 500, false, "Server error", null, {
-      error: err.message,
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-    });
+    console.error("🔴 [Get Profile Error]:", err);
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 
-// UPDATE Profile (for non-file data only, files handled by separate endpoints)
+// UPDATE Profile
 export const updateProfile = async (req, res) => {
-  let updateData = null;
-
   try {
-    updateData = { ...req.body };
-
-    console.log("Update Profile Request:", {
+    console.log("UPDATE Profile request:", {
       userId: req.user._id,
-      bodyKeys: Object.keys(req.body),
-      hasFile: !!req.file,
-      fileType: req.file?.fieldname,
-      bodySize: JSON.stringify(req.body).length,
-      isFileUpload: req.headers["content-type"]?.includes(
-        "multipart/form-data"
-      ),
+      body: req.body,
+      file: !!req.file,
     });
 
-    // Handle file uploads (for legacy support or when files come through main endpoint)
+    const userId = req.user._id;
+    const updates = req.body;
+
+    // Fetch user with all fields
+    let user = await User.findById(userId);
+    if (!user) {
+      console.log("User not found:", userId);
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Handle profile photo upload
     if (req.file) {
       try {
-        console.log("Processing file upload:", {
-          fieldname: req.file.fieldname,
-          mimetype: req.file.mimetype,
-          size: req.file.size,
-          originalname: req.file.originalname,
-        });
-
-        const streamUpload = (folder, resourceType = "image") =>
-          new Promise((resolve, reject) => {
-            const uploadOptions = {
-              folder: folder,
-              resource_type: resourceType,
-            };
-
-            if (resourceType === "raw") {
-              uploadOptions.format = "pdf";
+        const result = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            {
+              folder: "placify_profiles",
+              transformation: [
+                { width: 500, height: 500, crop: "limit" },
+                { quality: "auto" },
+              ],
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
             }
-
-            const stream = cloudinary.uploader.upload_stream(
-              uploadOptions,
-              (error, result) => (result ? resolve(result) : reject(error))
-            );
-            streamifier.createReadStream(req.file.buffer).pipe(stream);
-          });
-
-        let result;
-        if (req.file.fieldname === "profilePhoto") {
-          result = await streamUpload("placify_profilePhotos", "image");
-          updateData.profilePhoto = result.secure_url;
-          console.log("Profile photo uploaded:", result.secure_url);
-        } else if (req.file.fieldname === "resume") {
-          result = await streamUpload("placify_resumes", "raw");
-          updateData.resume = result.secure_url;
-          console.log("Resume uploaded:", result.secure_url);
-        }
-      } catch (uploadError) {
-        console.error("File upload error:", {
-          error: uploadError.message,
-          stack: uploadError.stack,
+          );
+          streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
         });
+
+        user.profilePhoto = result.secure_url;
+        console.log("Profile photo uploaded:", result.secure_url);
+      } catch (uploadError) {
+        console.error("Profile photo upload error:", uploadError);
+        return sendResponse(res, 500, false, "Error uploading profile photo");
+      }
+    }
+
+    // Update fields if provided
+    if (updates.name !== undefined) {
+      if (typeof updates.name !== "string" || updates.name.trim().length === 0) {
+        return sendResponse(res, 400, false, "Name must be a non-empty string");
+      }
+      user.name = updates.name.trim();
+    }
+
+    if (updates.username !== undefined) {
+      if (
+        typeof updates.username !== "string" ||
+        updates.username.trim().length === 0
+      ) {
         return sendResponse(
           res,
           400,
           false,
-          `Error uploading ${req.file.fieldname}: ${uploadError.message}`
+          "Username must be a non-empty string"
         );
       }
+      // Check if username is already taken by another user
+      const existingUser = await User.findOne({
+        username: updates.username.trim(),
+        _id: { $ne: userId },
+      });
+      if (existingUser) {
+        return sendResponse(res, 400, false, "Username is already taken");
+      }
+      user.username = updates.username.trim();
     }
 
-    // Parse JSON fields if sent as strings (REMOVED openToRoles from parsing)
-    const jsonFields = ["skills", "education", "socialProfiles", "about"];
+    if (updates.email !== undefined) {
+      if (
+        typeof updates.email !== "string" ||
+        updates.email.trim().length === 0
+      ) {
+        return sendResponse(
+          res,
+          400,
+          false,
+          "Email must be a non-empty string"
+        );
+      }
+      // Check if email is already taken by another user
+      const existingUser = await User.findOne({
+        email: updates.email.trim(),
+        _id: { $ne: userId },
+      });
+      if (existingUser) {
+        return sendResponse(res, 400, false, "Email is already taken");
+      }
+      user.email = updates.email.trim();
+    }
 
-    for (const field of jsonFields) {
-      if (updateData[field] && typeof updateData[field] === "string") {
+    // Student-specific updates
+    if (user.role === "student") {
+      if (updates.about !== undefined) {
         try {
-          updateData[field] = JSON.parse(updateData[field]);
-        } catch (parseError) {
-          console.error(`Error parsing ${field}:`, parseError.message);
+          const validatedAbout = validateAbout(updates.about);
+          user.about = validatedAbout;
+        } catch (error) {
+          console.log("About validation error:", error.message);
+          return sendResponse(res, 400, false, error.message);
+        }
+      }
+
+      if (updates.education !== undefined) {
+        try {
+          const validatedEducation = validateEducation(updates.education);
+          user.education = validatedEducation;
+        } catch (error) {
+          console.log("Education validation error:", error.message);
+          return sendResponse(res, 400, false, error.message);
+        }
+      }
+
+      if (updates.skills !== undefined) {
+        if (!Array.isArray(updates.skills)) {
+          return sendResponse(res, 400, false, "Skills must be an array");
+        }
+        // Validate each skill
+        const validatedSkills = updates.skills
+          .filter((skill) => typeof skill === "string" && skill.trim().length > 0)
+          .map((skill) => skill.trim())
+          .slice(0, 50); // Limit to 50 skills
+
+        user.skills = validatedSkills;
+      }
+
+      if (updates.socialProfiles !== undefined) {
+        if (
+          updates.socialProfiles === null ||
+          typeof updates.socialProfiles === "object"
+        ) {
+          user.socialProfiles = updates.socialProfiles;
+        } else {
           return sendResponse(
             res,
             400,
             false,
-            `Invalid ${field} format: ${parseError.message}`
+            "Social profiles must be an object or null"
           );
         }
       }
+
+      // Update profile completion status
+      user.profileCompleted = isProfileComplete(user);
     }
 
-    // Handle legacy experience field migration
-    if (updateData.yearsOfExperience !== undefined) {
-      if (!updateData.about) updateData.about = {};
-      updateData.about.experience = parseInt(updateData.yearsOfExperience) || 0;
-      delete updateData.yearsOfExperience;
-    }
+    // Save updated user
+    await user.save();
 
-    // Remove legacy experience array
-    if (updateData.experience) {
-      delete updateData.experience;
-    }
-
-    // REMOVE any openToRoles data if it accidentally gets sent
-    if (updateData.openToRoles) {
-      console.log("Removing openToRoles data as it's no longer supported");
-      delete updateData.openToRoles;
-    }
-
-    // Validate and clean data according to memory requirements
-    if (updateData.about) {
-      updateData.about = validateAbout(updateData.about);
-    }
-
-    if (updateData.education !== undefined) {
-      updateData.education = validateEducation(updateData.education);
-      console.log("Education validation result:", {
-        original: req.body.education,
-        cleaned: updateData.education,
-        count: updateData.education.length,
-      });
-    }
-
-    if (updateData.skills !== undefined) {
-      updateData.skills = validateSkills(updateData.skills);
-      console.log("Skills validation result:", {
-        original: req.body.skills,
-        cleaned: updateData.skills,
-        count: updateData.skills.length,
-      });
-    }
-
-    if (updateData.socialProfiles !== undefined) {
-      updateData.socialProfiles = validateSocialProfiles(
-        updateData.socialProfiles
-      );
-      console.log("Social profiles validation result:", {
-        original: req.body.socialProfiles,
-        cleaned: updateData.socialProfiles,
-        keys: Object.keys(updateData.socialProfiles),
-      });
-    }
-
-    // Additional validation for name
-    if (updateData.name !== undefined) {
-      if (
-        typeof updateData.name !== "string" ||
-        updateData.name.trim().length === 0
-      ) {
-        return sendResponse(
-          res,
-          400,
-          false,
-          "Name is required and must be a non-empty string"
-        );
-      }
-      updateData.name = updateData.name.trim();
-      if (updateData.name.length > 100) {
-        return sendResponse(
-          res,
-          400,
-          false,
-          "Name must be less than 100 characters"
-        );
-      }
-    }
-
-    // Clean data payload by removing empty values (SIMPLIFIED - no openToRoles handling)
-    const originalUpdateData = { ...updateData };
-    Object.keys(updateData).forEach((key) => {
-      const value = updateData[key];
-      if (
-        value === "" ||
-        value === null ||
-        value === undefined ||
-        (Array.isArray(value) && value.length === 0) ||
-        (typeof value === "object" &&
-          value !== null &&
-          Object.keys(value).length === 0)
-      ) {
-        console.log(`Removing empty field '${key}':`, value);
-        delete updateData[key];
-      }
-    });
-
-    console.log("Data cleaning summary:", {
-      originalFields: Object.keys(originalUpdateData),
-      cleanedFields: Object.keys(updateData),
-      removedFields: Object.keys(originalUpdateData).filter(
-        (key) => !Object.keys(updateData).includes(key)
-      ),
-    });
-
-    console.log("Final update data before database save:", {
-      hasName: !!updateData.name,
-      hasAbout: !!updateData.about,
-      educationCount: updateData.education?.length || 0,
-      skillsCount: updateData.skills?.length || 0,
-      socialProfilesKeys: updateData.socialProfiles
-        ? Object.keys(updateData.socialProfiles)
-        : [],
-      hasProfilePhoto: !!updateData.profilePhoto,
-      hasResume: !!updateData.resume,
-      completePayload: JSON.stringify(updateData, null, 2),
-    });
-
-    // Update user in database
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user._id,
-      { $set: updateData },
-      {
-        new: true,
-        runValidators: true,
-        select: "-password -__v",
-      }
-    );
-
-    if (!updatedUser) {
-      return sendResponse(res, 404, false, "User not found");
-    }
-
-    // Log the actual data structure after database update
-    console.log("User data after database update:", {
-      userId: updatedUser._id,
-      name: updatedUser.name,
-      aboutKeys: updatedUser.about ? Object.keys(updatedUser.about) : [],
-      skillsCount: updatedUser.skills?.length || 0,
-      educationCount: updatedUser.education?.length || 0,
-      socialProfilesKeys: updatedUser.socialProfiles
-        ? Object.keys(updatedUser.socialProfiles)
-        : [],
-      hasResume: !!updatedUser.resume,
-      hasProfilePhoto: !!updatedUser.profilePhoto,
-    });
-
-    // Update profile completion status
-    const profileCompleted = isProfileComplete(updatedUser);
-    if (profileCompleted !== updatedUser.profileCompleted) {
-      updatedUser.profileCompleted = profileCompleted;
-      await updatedUser.save();
-      console.log("Profile completion status updated:", {
-        userId: updatedUser._id,
-        newStatus: profileCompleted,
-      });
-    }
+    // Return updated user data (exclude sensitive fields)
+    const updatedUser = await User.findById(userId).select("-password -__v");
 
     console.log("Profile updated successfully:", {
       userId: updatedUser._id,
-      profileCompleted: updatedUser.profileCompleted,
-      fieldsUpdated: Object.keys(updateData),
+      role: updatedUser.role,
     });
 
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Profile updated successfully",
-      updatedUser
-    );
+    return sendResponse(res, 200, true, "Profile updated successfully", updatedUser);
   } catch (err) {
-    console.error("Update Profile Error:", {
-      message: err.message,
-      stack: err.stack,
-      userId: req.user?._id,
-      updateData: updateData
-        ? {
-            hasName: !!updateData.name,
-            hasAbout: !!updateData.about,
-            hasEducation: !!updateData.education,
-            hasSkills: !!updateData.skills,
-            hasSocialProfiles: !!updateData.socialProfiles,
-          }
-        : null,
-      validationError: err.name === "ValidationError" ? err.message : undefined,
-    });
-
-    // Handle specific error types
-    if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map((e) => e.message);
-      return sendResponse(
-        res,
-        400,
-        false,
-        `Validation failed: ${errors.join(", ")}`
-      );
-    }
-
-    if (err.name === "CastError") {
-      return sendResponse(res, 400, false, "Invalid data format provided");
-    }
-
-    return sendResponse(res, 500, false, "Server error", null, {
-      error: err.message,
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-    });
+    console.error("🔴 [Update Profile Error]:", err);
+    return sendResponse(res, 500, false, "Server error");
   }
 };
 

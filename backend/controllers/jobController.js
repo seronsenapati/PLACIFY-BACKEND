@@ -1,164 +1,169 @@
 import mongoose from "mongoose";
 import Job from "../models/Job.js";
 import Company from "../models/Company.js";
-import Application from "../models/Application.js";
-import { sendResponse, sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
-import validateFields from "../utils/validateFields.js";
-import { validateJobFields } from "../utils/validateAdvancedFields.js";
-import cloudinary from "../utils/cloudinary.js";
-import streamifier from "streamifier";
-import { createNewApplicationNotification } from "../utils/notificationHelpers.js";
-import { logInfo, logError, logWarn } from "../utils/logger.js";
+import User from "../models/User.js";
+import { sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
+import { logInfo, logError } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
 import xss from 'xss';
 
-// Create job
+// Helper function to sanitize input
+const sanitizeInput = (input) => {
+  if (typeof input === 'string') {
+    return xss(input.trim());
+  }
+  return input;
+};
+
+// Helper function to sanitize array of strings
+const sanitizeStringArray = (arr) => {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(item => typeof item === 'string' ? xss(item.trim()) : '').filter(item => item.length > 0);
+};
+
+/**
+ * @desc Create a new job
+ * @route POST /api/jobs
+ * @access Recruiter/Admin
+ */
 export const createJob = async (req, res) => {
   const requestId = uuidv4();
+  
   logInfo('Job creation initiated', {
     requestId,
     userId: req.user.id,
-    userRole: req.user.role
+    role: req.user.role
   });
 
   try {
-    const { isValid, missingFields } = validateFields(
-      ["title", "role", "desc", "location", "salary", "company"],
-      req.body
-    );
-
-    if (!isValid) {
-      logWarn('Job creation failed - missing fields', {
+    // Validate user role
+    if (req.user.role !== "recruiter" && req.user.role !== "admin") {
+      logWarn('Unauthorized job creation attempt', {
         requestId,
         userId: req.user.id,
-        missingFields
+        role: req.user.role
       });
-      return sendErrorResponse(res, 'VAL_001', { missingFields }, requestId);
+      return sendErrorResponse(res, 'AUTH_005', {}, requestId);
     }
 
-    // Sanitize inputs to prevent XSS attacks
-    const {
-      role,
-      desc,
-      salary,
-      title,
-      location,
-      skills = [],
-      jobType = "internship",
-      expiresAt,
-      applicationDeadline,
-      experienceLevel = "entry",
-      isRemote = false,
-      company: companyId
-    } = {
-      role: xss(req.body.role),
-      desc: xss(req.body.desc),
-      salary: req.body.salary,
-      title: xss(req.body.title),
-      location: xss(req.body.location),
-      skills: Array.isArray(req.body.skills) ? req.body.skills.map(skill => xss(skill)) : [],
-      jobType: xss(req.body.jobType) || "internship",
-      expiresAt: req.body.expiresAt,
-      applicationDeadline: req.body.applicationDeadline,
-      experienceLevel: req.body.experienceLevel || "entry",
-      isRemote: req.body.isRemote || false,
-      company: req.body.company
+    // Get recruiter with settings
+    const recruiter = await User.findById(req.user.id);
+    if (!recruiter) {
+      return sendErrorResponse(res, 'USER_001', {}, requestId);
+    }
+
+    // Validate required fields
+    const { title, role, desc, location, salary, skills } = req.body;
+    
+    if (!title || !role || !desc || !location || salary === undefined || !skills) {
+      logWarn('Missing required fields for job creation', {
+        requestId,
+        userId: req.user.id,
+        missingFields: !title ? 'title' : !role ? 'role' : !desc ? 'desc' : !location ? 'location' : salary === undefined ? 'salary' : !skills ? 'skills' : null
+      });
+      return sendErrorResponse(res, 'JOB_001', {}, requestId);
+    }
+
+    // Sanitize inputs
+    const sanitizedData = {
+      title: sanitizeInput(title),
+      role: sanitizeInput(role),
+      desc: sanitizeInput(desc),
+      location: sanitizeInput(location),
+      salary: Number(salary),
+      skills: sanitizeStringArray(skills),
+      createdBy: req.user.id
     };
 
-    const validJobTypes = ["internship", "full-time", "part-time", "contract"];
-    if (!validJobTypes.includes(jobType)) {
-      logWarn('Job creation failed - invalid job type', {
-        requestId,
-        userId: req.user.id,
-        jobType
-      });
-      return sendErrorResponse(res, 'VAL_002', { 
-        message: "Invalid job type",
-        validTypes: validJobTypes
-      }, requestId);
+    // Validate salary
+    if (isNaN(sanitizedData.salary) || sanitizedData.salary < 0) {
+      return sendErrorResponse(res, 'JOB_002', { field: 'salary' }, requestId);
     }
 
-    const validExperienceLevels = ["entry", "mid", "senior", "lead"];
-    if (!validExperienceLevels.includes(experienceLevel)) {
-      logWarn('Job creation failed - invalid experience level', {
-        requestId,
-        userId: req.user.id,
-        experienceLevel
-      });
-      return sendErrorResponse(res, 'VAL_002', { 
-        message: "Invalid experience level",
-        validTypes: validExperienceLevels
-      }, requestId);
+    // Validate skills array
+    if (!Array.isArray(sanitizedData.skills) || sanitizedData.skills.length === 0) {
+      return sendErrorResponse(res, 'JOB_002', { field: 'skills' }, requestId);
     }
 
-    // Validate company exists and belongs to user
-    const company = await Company.findOne({ 
-      _id: companyId,
-      createdBy: req.user.id 
-    });
-
-    if (!company) {
-      logWarn('Job creation failed - company not found or not owned by user', {
-        requestId,
-        userId: req.user.id,
-        companyId
-      });
-      return sendErrorResponse(res, 'COMPANY_002', {}, requestId);
+    // Get company from recruiter
+    if (req.user.role === "recruiter") {
+      const recruiterWithCompany = await User.findById(req.user.id).populate('company');
+      if (!recruiterWithCompany || !recruiterWithCompany.company) {
+        return sendErrorResponse(res, 'COMPANY_001', {}, requestId);
+      }
+      sanitizedData.company = recruiterWithCompany.company._id;
+    } else if (req.user.role === "admin") {
+      // Admin can specify company
+      if (!req.body.company) {
+        return sendErrorResponse(res, 'JOB_001', { field: 'company' }, requestId);
+      }
+      sanitizedData.company = req.body.company;
     }
 
-    const fieldErrors = validateJobFields({ role, desc, salary });
-    if (fieldErrors.length > 0) {
-      logWarn('Job creation failed - validation errors', {
-        requestId,
-        userId: req.user.id,
-        fieldErrors
-      });
-      return sendErrorResponse(res, 'VAL_002', { 
-        message: fieldErrors.join(", "),
-        fieldErrors
-      }, requestId);
-    }
-
-    // Set default expiration date to 30 days from now if not provided
-    const jobExpiresAt = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    // Set default values from recruiter settings if available
+    const defaultJobExpirationDays = recruiter.recruiterSettings?.defaultJobExpirationDays || 30;
+    const defaultApplicationDeadlineDays = recruiter.recruiterSettings?.defaultApplicationDeadlineDays || 14;
     
-    // Set default application deadline to 7 days before expiration if not provided
-    const jobApplicationDeadline = applicationDeadline ? 
-      new Date(applicationDeadline) : 
-      new Date(jobExpiresAt.getTime() - 7 * 24 * 60 * 60 * 1000);
+    // Set expiration date (default 30 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + defaultJobExpirationDays);
+    sanitizedData.expiresAt = expiresAt;
 
-    const newJob = await Job.create({
-      title,
-      role,
-      desc,
-      location,
-      salary,
-      skills,
-      jobType,
-      experienceLevel,
-      isRemote,
-      expiresAt: jobExpiresAt,
-      applicationDeadline: jobApplicationDeadline,
-      createdBy: req.user.id,
-      company: companyId
-    });
+    // Set application deadline (default 14 days from now)
+    const applicationDeadline = new Date();
+    applicationDeadline.setDate(applicationDeadline.getDate() + defaultApplicationDeadlineDays);
+    sanitizedData.applicationDeadline = applicationDeadline;
 
-    company.jobs.push(newJob._id);
-    await company.save();
+    // Set other default values
+    sanitizedData.jobType = req.body.jobType || "internship";
+    sanitizedData.status = "active";
+    sanitizedData.experienceLevel = req.body.experienceLevel || "entry";
+    sanitizedData.isRemote = req.body.isRemote === true;
+
+    // Create job
+    const job = new Job(sanitizedData);
+    await job.save();
+
+    // Populate company and creator info
+    await job.populate([
+      { path: 'createdBy', select: 'name email' },
+      { path: 'company', select: 'name logo' }
+    ]);
 
     logInfo('Job created successfully', {
       requestId,
-      jobId: newJob._id,
+      jobId: job._id,
       userId: req.user.id,
-      title: newJob.title
+      title: job.title
     });
 
-    return sendSuccessResponse(res, "Job created successfully", newJob, 201, requestId);
+    return sendSuccessResponse(
+      res,
+      "Job created successfully",
+      job,
+      201,
+      requestId
+    );
   } catch (error) {
     logError("Job creation error", error, {
       requestId,
       userId: req.user.id
     });
+    
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      return sendErrorResponse(res, 'VALIDATION_001', { errors }, requestId);
+    }
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return sendErrorResponse(res, 'JOB_004', {}, requestId);
+    }
+    
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };

@@ -40,7 +40,7 @@ export const updateProfileInfo = async (req, res) => {
     // Check if email already used by someone else
     const existingEmail = await User.findOne({ email, _id: { $ne: userId } });
     if (existingEmail) {
-      return sendResponse(res, 400, false, "Email is already taken");
+      return sendResponse(res, 400, false, "Email already in use");
     }
 
     // Check if username already used by someone else
@@ -49,46 +49,58 @@ export const updateProfileInfo = async (req, res) => {
       _id: { $ne: userId },
     });
     if (existingUsername) {
-      return sendResponse(res, 400, false, "Username is already taken");
+      return sendResponse(res, 400, false, "Username already in use");
     }
 
-    let profilePhotoUrl;
+    let updateData = { name, username, email };
 
-    // If profile pic uploaded, push to Cloudinary
+    // Handle profile photo upload
     if (req.file) {
-      const streamUpload = () => {
-        return new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
             {
-              folder: "placify_profile_photos",
-              resource_type: "image",
+              folder: "placify_profiles",
+              transformation: [
+                { width: 500, height: 500, crop: "limit" },
+                { quality: "auto" },
+              ],
             },
             (error, result) => {
-              if (result) resolve(result);
-              else reject(error);
+              if (error) reject(error);
+              else resolve(result);
             }
           );
-          streamifier.createReadStream(req.file.buffer).pipe(stream);
+          streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
         });
-      };
-      const result = await streamUpload();
-      profilePhotoUrl = result.secure_url;
+
+        updateData.profilePhoto = result.secure_url;
+      } catch (uploadError) {
+        console.error("[Profile Photo Upload Error]:", uploadError);
+        return sendResponse(
+          res,
+          500,
+          false,
+          "Error uploading profile photo"
+        );
+      }
     }
 
-    const updateData = { name, username, email };
-    if (profilePhotoUrl) updateData.profilePhoto = profilePhotoUrl;
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+    const user = await User.findByIdAndUpdate(userId, updateData, {
       new: true,
       runValidators: true,
     }).select("-password");
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
 
     return sendResponse(
       res,
       200,
       true,
       "Profile updated successfully",
-      updatedUser
+      user
     );
   } catch (error) {
     console.error("[updateProfileInfo] Error:", error);
@@ -100,22 +112,27 @@ export const updateProfileInfo = async (req, res) => {
 export const changePassword = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { currentPassword, newPassword, confirmNewPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword || !confirmNewPassword) {
-      return sendResponse(res, 400, false, "All password fields are required");
-    }
-
-    if (newPassword !== confirmNewPassword) {
+    if (!currentPassword || !newPassword) {
       return sendResponse(
         res,
         400,
         false,
-        "New password and confirmation do not match"
+        "Current password and new password are required"
       );
     }
 
-    const user = await User.findById(userId).select("password");
+    if (newPassword.length < 6) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "New password must be at least 6 characters"
+      );
+    }
+
+    const user = await User.findById(userId).select("+password");
     if (!user) {
       return sendResponse(res, 404, false, "User not found");
     }
@@ -277,6 +294,197 @@ export const resetNotificationPreferences = async (req, res) => {
     );
   } catch (error) {
     console.error("[resetNotificationPreferences] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Get Recruiter Settings
+export const getRecruiterSettings = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Check if user is a recruiter and get user data
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    if (user.role !== "recruiter") {
+      return sendResponse(res, 403, false, "Access denied. Recruiter access required.");
+    }
+
+    // Ensure recruiter settings exist
+    if (!user.recruiterSettings) {
+      user.recruiterSettings = {};
+      await user.save();
+    }
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Recruiter settings fetched successfully",
+      user.recruiterSettings
+    );
+  } catch (error) {
+    console.error("[getRecruiterSettings] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Update Recruiter Settings
+export const updateRecruiterSettings = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const settings = req.body;
+
+    // Check if user is a recruiter and get user data
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    if (user.role !== "recruiter") {
+      return sendResponse(res, 403, false, "Access denied. Recruiter access required.");
+    }
+
+    // Validate settings
+    const validSettings = {};
+    
+    // Validate numeric settings
+    if (settings.defaultJobExpirationDays !== undefined) {
+      const value = parseInt(settings.defaultJobExpirationDays);
+      if (isNaN(value) || value < 1 || value > 365) {
+        return sendResponse(res, 400, false, "defaultJobExpirationDays must be between 1 and 365");
+      }
+      validSettings.defaultJobExpirationDays = value;
+    }
+    
+    if (settings.defaultApplicationDeadlineDays !== undefined) {
+      const value = parseInt(settings.defaultApplicationDeadlineDays);
+      if (isNaN(value) || value < 1 || value > 365) {
+        return sendResponse(res, 400, false, "defaultApplicationDeadlineDays must be between 1 and 365");
+      }
+      validSettings.defaultApplicationDeadlineDays = value;
+    }
+    
+    if (settings.jobExpirationNotificationDays !== undefined) {
+      const value = parseInt(settings.jobExpirationNotificationDays);
+      if (isNaN(value) || value < 1 || value > 30) {
+        return sendResponse(res, 400, false, "jobExpirationNotificationDays must be between 1 and 30");
+      }
+      validSettings.jobExpirationNotificationDays = value;
+    }
+    
+    if (settings.applicationReviewThreshold !== undefined) {
+      const value = parseInt(settings.applicationReviewThreshold);
+      if (isNaN(value) || value < 1 || value > 100) {
+        return sendResponse(res, 400, false, "applicationReviewThreshold must be between 1 and 100");
+      }
+      validSettings.applicationReviewThreshold = value;
+    }
+    
+    // Validate boolean settings
+    if (settings.notifyBeforeJobExpiration !== undefined) {
+      if (typeof settings.notifyBeforeJobExpiration !== 'boolean') {
+        return sendResponse(res, 400, false, "notifyBeforeJobExpiration must be boolean");
+      }
+      validSettings.notifyBeforeJobExpiration = settings.notifyBeforeJobExpiration;
+    }
+    
+    if (settings.autoReviewApplications !== undefined) {
+      if (typeof settings.autoReviewApplications !== 'boolean') {
+        return sendResponse(res, 400, false, "autoReviewApplications must be boolean");
+      }
+      validSettings.autoReviewApplications = settings.autoReviewApplications;
+    }
+    
+    // Validate dashboard metrics
+    if (settings.dashboardMetrics !== undefined) {
+      if (!Array.isArray(settings.dashboardMetrics)) {
+        return sendResponse(res, 400, false, "dashboardMetrics must be an array");
+      }
+      
+      const validMetrics = [
+        'totalJobs',
+        'activeJobs',
+        'expiredJobs',
+        'totalApplications',
+        'pendingApplications',
+        'reviewedApplications',
+        'rejectedApplications'
+      ];
+      
+      const invalidMetrics = settings.dashboardMetrics.filter(metric => !validMetrics.includes(metric));
+      if (invalidMetrics.length > 0) {
+        return sendResponse(res, 400, false, `Invalid dashboard metrics: ${invalidMetrics.join(', ')}`);
+      }
+      
+      validSettings.dashboardMetrics = settings.dashboardMetrics;
+    }
+    
+    // Validate export format
+    if (settings.defaultExportFormat !== undefined) {
+      const validFormats = ['csv', 'json'];
+      if (!validFormats.includes(settings.defaultExportFormat)) {
+        return sendResponse(res, 400, false, "defaultExportFormat must be 'csv' or 'json'");
+      }
+      validSettings.defaultExportFormat = settings.defaultExportFormat;
+    }
+
+    // Update recruiter settings
+    user.recruiterSettings = {
+      ...user.recruiterSettings,
+      ...validSettings
+    };
+    
+    await user.save();
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Recruiter settings updated successfully",
+      user.recruiterSettings
+    );
+  } catch (error) {
+    console.error("[updateRecruiterSettings] Error:", error);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
+
+// ✅ Reset Recruiter Settings to Default
+export const resetRecruiterSettings = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Check if user is a recruiter and reset settings
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $unset: { recruiterSettings: 1 } },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    if (updatedUser.role !== "recruiter") {
+      return sendResponse(res, 403, false, "Access denied. Recruiter access required.");
+    }
+
+    // Get the user again to get default settings
+    const userWithDefaults = await User.findById(userId).select("recruiterSettings");
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Recruiter settings reset to default",
+      userWithDefaults.recruiterSettings
+    );
+  } catch (error) {
+    console.error("[resetRecruiterSettings] Error:", error);
     return sendResponse(res, 500, false, "Server error");
   }
 };

@@ -71,56 +71,94 @@ const notificationPreferencesSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-// Define sub-schema for About section (REMOVED openToRoles)
+
+// Define sub-schema for Recruiter Settings
+const recruiterSettingsSchema = new mongoose.Schema(
+  {
+    // Job creation defaults
+    defaultJobExpirationDays: {
+      type: Number,
+      default: 30,
+      min: 1,
+      max: 365
+    },
+    defaultApplicationDeadlineDays: {
+      type: Number,
+      default: 14,
+      min: 1,
+      max: 365
+    },
+    // Notification preferences for job expiration
+    notifyBeforeJobExpiration: {
+      type: Boolean,
+      default: true
+    },
+    jobExpirationNotificationDays: {
+      type: Number,
+      default: 3,
+      min: 1,
+      max: 30
+    },
+    // Application review settings
+    autoReviewApplications: {
+      type: Boolean,
+      default: false
+    },
+    applicationReviewThreshold: {
+      type: Number,
+      default: 10,
+      min: 1,
+      max: 100
+    },
+    // Dashboard preferences
+    dashboardMetrics: {
+      type: [String],
+      default: () => [
+        'totalJobs',
+        'activeJobs',
+        'expiredJobs',
+        'totalApplications',
+        'pendingApplications',
+        'reviewedApplications',
+        'rejectedApplications'
+      ]
+    },
+    // Export preferences
+    defaultExportFormat: {
+      type: String,
+      enum: ['csv', 'json'],
+      default: 'csv'
+    }
+  },
+  { _id: false }
+);
+
+// Define sub-schema for About section
 const aboutSchema = new mongoose.Schema(
   {
-    gender: { type: String, required: true },
-    location: { type: String, required: true },
-    primaryRole: { type: String, required: true },
-    experience: { type: Number, required: true },
+    gender: { type: String },
+    location: { type: String },
+    primaryRole: { type: String },
+    experience: { type: Number },
   },
   { _id: false }
 );
 
 const userSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: true,
-    },
-    username: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    password: {
-      type: String,
-      required: true,
-    },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
     role: {
       type: String,
       enum: ["student", "recruiter", "admin"],
       default: "student",
     },
-    profilePhoto: {
-      type: String,
-      default: null,
-    },
-    resume: {
-      type: String,
-      default: null,
-    },
-    bookmarkedJobs: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Job",
-      },
-    ],
+    profilePhoto: { type: String },
+    resume: { type: String },
+    username: { type: String, unique: true },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
     isActive: {
       type: Boolean,
       default: true,
@@ -140,6 +178,10 @@ const userSchema = new mongoose.Schema(
     company: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
+    },
+    recruiterSettings: {
+      type: recruiterSettingsSchema,
+      default: () => ({})
     },
     
     // Notification preferences

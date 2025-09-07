@@ -7,8 +7,12 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
   resetNotificationPreferences,
+  getRecruiterSettings,
+  updateRecruiterSettings,
+  resetRecruiterSettings,
 } from "../controllers/settingsController.js";
 import uploadProfilePhoto from "../controllers/uploadProfilePhoto.js";
+import { isRecruiter } from "../middleware/rbacMiddleware.js";
 
 const router = express.Router();
 
@@ -34,5 +38,15 @@ router.patch("/notifications", protect, updateNotificationPreferences);
 
 // ✅ Reset notification preferences to default
 router.post("/notifications/reset", protect, resetNotificationPreferences);
+
+// ✅ Recruiter-specific settings
+// Get recruiter settings
+router.get("/recruiter", protect, isRecruiter, getRecruiterSettings);
+
+// Update recruiter settings
+router.patch("/recruiter", protect, isRecruiter, updateRecruiterSettings);
+
+// Reset recruiter settings to default
+router.post("/recruiter/reset", protect, isRecruiter, resetRecruiterSettings);
 
 export default router;

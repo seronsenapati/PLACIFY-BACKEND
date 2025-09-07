@@ -414,7 +414,7 @@ export const getRecruiterDashboardOverview = async (req, res) => {
       return sendErrorResponse(res, 'AUTH_005', {}, requestId);
     }
 
-    // Get recruiter's company
+    // Get recruiter with settings and company
     const recruiter = await User.findById(req.user.id).populate('company');
     
     if (!recruiter || !recruiter.company) {
@@ -509,7 +509,14 @@ export const getRecruiterDashboardOverview = async (req, res) => {
         name: recruiter.company.name,
         id: recruiter.company._id
       },
-      recentActivity: enhancedRecentJobs
+      recentActivity: enhancedRecentJobs,
+      // Use recruiter settings for dashboard metrics if available
+      settings: {
+        defaultJobExpirationDays: recruiter.recruiterSettings?.defaultJobExpirationDays || 30,
+        defaultApplicationDeadlineDays: recruiter.recruiterSettings?.defaultApplicationDeadlineDays || 14,
+        notifyBeforeJobExpiration: recruiter.recruiterSettings?.notifyBeforeJobExpiration ?? true,
+        jobExpirationNotificationDays: recruiter.recruiterSettings?.jobExpirationNotificationDays || 3
+      }
     };
 
     logInfo('Recruiter dashboard overview fetched successfully', {
@@ -611,9 +618,8 @@ export const getAdminDashboardOverview = async (req, res) => {
 
     // Calculate key metrics
     const totalUsers = userStats.total || 0;
-    const studentUsers = userStats.students || 0;
-    const recruiterUsers = userStats.recruiters || 0;
-    const adminUsers = userStats.admins || 0;
+    const totalStudents = userStats.students || 0;
+    const totalRecruiters = userStats.recruiters || 0;
     
     const totalJobs = jobStats.total || 0;
     const activeJobs = jobStats.active || 0;
@@ -625,15 +631,17 @@ export const getAdminDashboardOverview = async (req, res) => {
     const rejectedApplications = applicationStats.rejected || 0;
     
     const totalCompanies = companyStats.total || 0;
-    const activeCompanies = companyStats.active || 0;
+    
+    const responseRate = totalApplications > 0 
+      ? ((reviewedApplications + rejectedApplications) / totalApplications * 100).toFixed(1) 
+      : 0;
 
     // Dashboard overview data
     const overview = {
       users: {
         total: totalUsers,
-        students: studentUsers,
-        recruiters: recruiterUsers,
-        admins: adminUsers
+        students: totalStudents,
+        recruiters: totalRecruiters
       },
       jobs: {
         total: totalJobs,
@@ -644,11 +652,11 @@ export const getAdminDashboardOverview = async (req, res) => {
         total: totalApplications,
         pending: pendingApplications,
         reviewed: reviewedApplications,
-        rejected: rejectedApplications
+        rejected: rejectedApplications,
+        responseRate: parseFloat(responseRate)
       },
       companies: {
-        total: totalCompanies,
-        active: activeCompanies
+        total: totalCompanies
       }
     };
 
@@ -657,8 +665,7 @@ export const getAdminDashboardOverview = async (req, res) => {
       adminId: req.user.id,
       totalUsers,
       totalJobs,
-      totalApplications,
-      totalCompanies
+      totalApplications
     });
 
     return sendSuccessResponse(

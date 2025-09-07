@@ -32,42 +32,23 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-if (fs.existsSync(path.join(__dirname, ".env.local"))) {
-  dotenv.config({ path: path.join(__dirname, ".env.local") });
-  console.log("Loaded local environment variables from .env.local");
+// Load .env.local if it exists (for local development overrides)
+const envLocalPath = path.resolve(__dirname, ".env.local");
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath });
+  console.log("Loaded .env.local file");
 }
-
-// Validate required environment variables
-const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-
-if (missingEnvVars.length > 0) {
-  console.error(`❌ Missing required environment variables: ${missingEnvVars.join(', ')}`);
-  process.exit(1);
-}
-
-// Add error handling for uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
-app.use(
-  cors({
-    origin: [process.env.FRONTEND_URL || "http://localhost:5173", "https://placify-frontend.vercel.app"],
-    credentials: true,
-  })
-);
+// Connect to MongoDB
+connectDB();
 
-app.use(express.json());
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use(helmet());
 
@@ -114,53 +95,68 @@ const startServer = async () => {
     await connectDB();
     console.log("MongoDB connected successfully");
     
+    // Import and start cron jobs only in production or if explicitly enabled
+    if (process.env.NODE_ENV === 'production' || process.env.ENABLE_CRON === 'true') {
+      console.log("Starting cron jobs...");
+      
+      // Import cron jobs dynamically
+      const { default: startAutoCleanupCron } = await import('./cronJobs/autoCleanup.js');
+      const { startRecruiterNotificationCron } = await import('./cronJobs/recruiterNotifications.js');
+      
+      // Start cron jobs
+      startAutoCleanupCron();
+      startRecruiterNotificationCron();
+    } else {
+      console.log("⏭️  Cron jobs skipped (not in production and not explicitly enabled)");
+    }
+    
     server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
     });
     
     // Handle server errors
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.log(`Port ${PORT} is already in use. Trying ${PORT + 1}...`);
-        setTimeout(() => {
-          server = app.listen(PORT + 1, () => {
-            console.log(`🚀 Server is running on http://localhost:${PORT + 1}`);
-          });
-        }, 1000);
-      } else {
-        console.error('Server error:', err);
-        process.exit(1);
-      }
+    server.on("error", (error) => {
+      console.error("❌ Server error:", error);
+      process.exit(1);
     });
+    
+    // Graceful shutdown
+    const gracefulShutdown = () => {
+      console.log("🛑 Received shutdown signal, shutting down gracefully...");
+      server.close(() => {
+        console.log("✅ Server closed successfully");
+        process.exit(0);
+      });
+      
+      // Force shutdown after 10 seconds
+      setTimeout(() => {
+        console.error("💥 Force shutdown after 10 seconds");
+        process.exit(1);
+      }, 10000);
+    };
+    
+    process.on("SIGTERM", gracefulShutdown);
+    process.on("SIGINT", gracefulShutdown);
+    
   } catch (error) {
-    console.error("❌ Failed to connect to database:", error);
+    console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
 };
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  if (server) {
-    server.close(() => {
-      console.log('Process terminated gracefully');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
+// Handle uncaught exceptions
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error);
+  process.exit(1);
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  if (server) {
-    server.close(() => {
-      console.log('Process terminated gracefully');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
 });
 
+// Start the server
 startServer();
+
+export default app;

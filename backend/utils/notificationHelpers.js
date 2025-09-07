@@ -279,6 +279,40 @@ export const createSystemNotification = async (userId, title, message, options =
 };
 
 /**
+ * Create recruiter settings update notification
+ * @param {string} recruiterId - Recruiter user ID
+ * @param {string} settingName - Name of the setting that was updated
+ * @returns {Promise<object>} Created notification
+ */
+export const createRecruiterSettingsUpdateNotification = async (recruiterId, settingName) => {
+  return await createNotification(
+    recruiterId,
+    NOTIFICATION_TYPES.ACCOUNT_UPDATE,
+    { updateType: `Recruiter settings updated: ${settingName}` },
+    { priority: NOTIFICATION_PRIORITIES.LOW }
+  );
+};
+
+/**
+ * Create application auto-review notification
+ * @param {string} recruiterId - Recruiter user ID
+ * @param {string} jobTitle - Job title
+ * @param {number} count - Number of applications auto-reviewed
+ * @returns {Promise<object>} Created notification
+ */
+export const createApplicationAutoReviewNotification = async (recruiterId, jobTitle, count) => {
+  return await createNotification(
+    recruiterId,
+    NOTIFICATION_TYPES.SYSTEM_MESSAGE,
+    { 
+      customTitle: 'Applications Auto-Reviewed',
+      customMessage: `${count} applications for "${jobTitle}" have been automatically reviewed based on your settings.`
+    },
+    { priority: NOTIFICATION_PRIORITIES.MEDIUM }
+  );
+};
+
+/**
  * Mark notifications as read by criteria
  * @param {string} userId - User ID
  * @param {object} criteria - Additional criteria for filtering
