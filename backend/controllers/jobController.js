@@ -61,7 +61,16 @@ export const createJob = async (req, res) => {
         userId: req.user.id,
         missingFields: !title ? 'title' : !role ? 'role' : !desc ? 'desc' : !location ? 'location' : salary === undefined ? 'salary' : !skills ? 'skills' : null
       });
-      return sendErrorResponse(res, 'JOB_001', {}, requestId);
+      return sendErrorResponse(res, 'JOB_001', {
+        missingFields: {
+          title: !title,
+          role: !role,
+          desc: !desc,
+          location: !location,
+          salary: salary === undefined,
+          skills: !skills
+        }
+      }, requestId);
     }
 
     // Sanitize inputs
@@ -89,13 +98,23 @@ export const createJob = async (req, res) => {
     if (req.user.role === "recruiter") {
       const recruiterWithCompany = await User.findById(req.user.id).populate('company');
       if (!recruiterWithCompany || !recruiterWithCompany.company) {
-        return sendErrorResponse(res, 'COMPANY_001', {}, requestId);
+        logWarn('Recruiter does not have a company profile', {
+          requestId,
+          userId: req.user.id
+        });
+        return sendErrorResponse(res, 'JOB_004', {
+          message: 'Recruiters must create a company profile before posting jobs'
+        }, requestId);
       }
       sanitizedData.company = recruiterWithCompany.company._id;
     } else if (req.user.role === "admin") {
       // Admin can specify company
       if (!req.body.company) {
-        return sendErrorResponse(res, 'JOB_001', { field: 'company' }, requestId);
+        logWarn('Admin did not specify company for job creation', {
+          requestId,
+          userId: req.user.id
+        });
+        return sendErrorResponse(res, 'JOB_001', { field: 'company', message: 'Company is required for admin job creation' }, requestId);
       }
       sanitizedData.company = req.body.company;
     }

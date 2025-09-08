@@ -165,5 +165,96 @@ jobSchema.statics.getStatsByRecruiter = async function(recruiterId) {
   return result;
 };
 
+// Static method to get detailed job statistics by recruiter
+jobSchema.statics.getDetailedStatsByRecruiter = async function(recruiterId) {
+  const stats = await this.aggregate([
+    { $match: { createdBy: new mongoose.Types.ObjectId(recruiterId) } },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        remoteJobs: {
+          $sum: {
+            $cond: [{ $eq: ['$isRemote', true] }, 1, 0]
+          }
+        },
+        jobsByType: {
+          $push: '$jobType'
+        },
+        jobsByExperience: {
+          $push: '$experienceLevel'
+        }
+      }
+    }
+  ]);
+  
+  const result = {
+    total: 0,
+    active: 0,
+    inactive: 0,
+    expired: 0,
+    remoteJobs: 0,
+    byType: {},
+    byExperience: {}
+  };
+  
+  // Initialize job type counts
+  const jobTypes = ["internship", "full-time", "part-time", "contract"];
+  jobTypes.forEach(type => {
+    result.byType[type] = 0;
+  });
+  
+  // Initialize experience level counts
+  const experienceLevels = ["entry", "mid", "senior", "lead"];
+  experienceLevels.forEach(level => {
+    result.byExperience[level] = 0;
+  });
+  
+  stats.forEach(stat => {
+    result[stat._id] = stat.count;
+    result.total += stat.count;
+    result.remoteJobs += stat.remoteJobs;
+    
+    // Count jobs by type
+    stat.jobsByType.forEach(type => {
+      if (result.byType[type] !== undefined) {
+        result.byType[type] += 1;
+      }
+    });
+    
+    // Count jobs by experience level
+    stat.jobsByExperience.forEach(level => {
+      if (result.byExperience[level] !== undefined) {
+        result.byExperience[level] += 1;
+      }
+    });
+  });
+  
+  return result;
+};
+
+// Static method to get jobs expiring soon for a recruiter
+jobSchema.statics.getExpiringSoonByRecruiter = async function(recruiterId, days = 7) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() + days);
+  
+  const expiringJobs = await this.find({
+    createdBy: new mongoose.Types.ObjectId(recruiterId),
+    status: 'active',
+    expiresAt: {
+      $gte: new Date(),
+      $lte: cutoffDate
+    }
+  }).select('_id title expiresAt applicationDeadline');
+  
+  return expiringJobs.map(job => ({
+    id: job._id,
+    title: job.title,
+    expiresAt: job.expiresAt,
+    applicationDeadline: job.applicationDeadline,
+    daysUntilExpiration: Math.ceil((job.expiresAt - new Date()) / (1000 * 60 * 60 * 24))
+  }));
+};
+
 const Job = mongoose.model("Job", jobSchema);
 export default Job;

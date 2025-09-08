@@ -238,6 +238,74 @@ userSchema.statics.getStats = async function() {
   return result;
 };
 
+// Static method to get recruiter activity statistics
+userSchema.statics.getRecruiterActivityStats = async function(recruiterId) {
+  const stats = await this.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(recruiterId),
+        role: 'recruiter'
+      }
+    },
+    {
+      $lookup: {
+        from: 'jobs',
+        localField: '_id',
+        foreignField: 'createdBy',
+        as: 'jobs'
+      }
+    },
+    {
+      $lookup: {
+        from: 'applications',
+        localField: 'jobs._id',
+        foreignField: 'job',
+        as: 'applications'
+      }
+    },
+    {
+      $project: {
+        jobCount: { $size: '$jobs' },
+        applicationCount: { $size: '$applications' },
+        activeJobs: {
+          $size: {
+            $filter: {
+              input: '$jobs',
+              cond: { $eq: ['$$this.status', 'active'] }
+            }
+          }
+        },
+        expiredJobs: {
+          $size: {
+            $filter: {
+              input: '$jobs',
+              cond: { $eq: ['$$this.status', 'expired'] }
+            }
+          }
+        },
+        reviewedApplications: {
+          $size: {
+            $filter: {
+              input: '$applications',
+              cond: { $eq: ['$$this.status', 'reviewed'] }
+            }
+          }
+        },
+        rejectedApplications: {
+          $size: {
+            $filter: {
+              input: '$applications',
+              cond: { $eq: ['$$this.status', 'rejected'] }
+            }
+          }
+        }
+      }
+    }
+  ]);
+  
+  return stats.length > 0 ? stats[0] : null;
+};
+
 const User = mongoose.model("User", userSchema);
 
 export default User;

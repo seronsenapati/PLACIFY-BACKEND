@@ -36,11 +36,11 @@ router.post(
     body("desc").notEmpty().withMessage("Description is required").trim(),
     body("location").notEmpty().withMessage("Location is required").trim(),
     body("salary").isNumeric().withMessage("Salary must be a number"),
-    body("skills").optional().isArray().withMessage("Skills must be an array"),
+    body("skills").isArray({ min: 1 }).withMessage("Skills must be an array with at least one item"),
     body("expiresAt").optional().isISO8601().withMessage("Expiration date must be a valid date"),
     body("applicationDeadline").optional().isISO8601().withMessage("Application deadline must be a valid date"),
     body("experienceLevel").optional().isIn(["entry", "mid", "senior", "lead"]).withMessage("Invalid experience level"),
-    body("company").notEmpty().withMessage("Company is required").isMongoId().withMessage("Company must be a valid ID")
+    body("company").optional().isMongoId().withMessage("Company must be a valid ID")
   ],
   validateRequest,
   createJob

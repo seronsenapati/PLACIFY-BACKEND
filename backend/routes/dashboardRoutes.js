@@ -5,6 +5,8 @@ import {
   getStudentDashboardOverview,
   getStudentApplicationAnalytics,
   getRecruiterDashboardOverview,
+  getRecruiterApplicationAnalytics,
+  getRecruiterJobStats,
   getAdminDashboardOverview
 } from "../controllers/dashboardController.js";
 
@@ -46,6 +48,28 @@ router.get(
   isRecruiter,
   generalApiLimiter,
   getRecruiterDashboardOverview
+);
+
+// Get recruiter application analytics
+router.get(
+  "/recruiter/analytics", 
+  isRecruiter,
+  [
+    query("timeframe")
+      .optional()
+      .isInt({ min: 1, max: 365 })
+      .withMessage("Timeframe must be between 1 and 365 days")
+  ],
+  validateRequest,
+  getRecruiterApplicationAnalytics
+);
+
+// Get recruiter job statistics
+router.get(
+  "/recruiter/job-stats", 
+  isRecruiter,
+  generalApiLimiter,
+  getRecruiterJobStats
 );
 
 // Get admin dashboard overview

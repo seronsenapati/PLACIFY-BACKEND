@@ -274,6 +274,76 @@ applicationSchema.statics.getApplicationTimeline = async function(applicationId)
   };
 };
 
+// Static method to get top performing jobs by recruiter
+applicationSchema.statics.getTopJobsByRecruiter = async function(recruiterId, limit = 5) {
+  const topJobs = await this.aggregate([
+    {
+      $lookup: {
+        from: "jobs",
+        localField: "job",
+        foreignField: "_id",
+        as: "jobDetails"
+      }
+    },
+    {
+      $match: {
+        "jobDetails.createdBy": new mongoose.Types.ObjectId(recruiterId)
+      }
+    },
+    {
+      $group: {
+        _id: '$job',
+        applicationCount: { $sum: 1 },
+        statusBreakdown: {
+          $push: '$status'
+        }
+      }
+    },
+    {
+      $lookup: {
+        from: 'jobs',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'jobDetails'
+      }
+    },
+    {
+      $unwind: '$jobDetails'
+    },
+    {
+      $project: {
+        _id: 1,
+        title: '$jobDetails.title',
+        applicationCount: 1,
+        reviewedCount: {
+          $size: {
+            $filter: {
+              input: '$statusBreakdown',
+              cond: { $eq: ['$$this', 'reviewed'] }
+            }
+          }
+        },
+        rejectedCount: {
+          $size: {
+            $filter: {
+              input: '$statusBreakdown',
+              cond: { $eq: ['$$this', 'rejected'] }
+            }
+          }
+        }
+      }
+    },
+    {
+      $sort: { applicationCount: -1 }
+    },
+    {
+      $limit: limit
+    }
+  ]);
+  
+  return topJobs;
+};
+
 const Application = mongoose.model("Application", applicationSchema);
 
 export default Application;
