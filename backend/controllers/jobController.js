@@ -96,8 +96,8 @@ export const createJob = async (req, res) => {
 
     // Get company from recruiter
     if (req.user.role === "recruiter") {
-      const recruiterWithCompany = await User.findById(req.user.id).populate('company');
-      if (!recruiterWithCompany || !recruiterWithCompany.company) {
+      // Check if recruiter has a company
+      if (!recruiter.company) {
         logWarn('Recruiter does not have a company profile', {
           requestId,
           userId: req.user.id
@@ -107,20 +107,20 @@ export const createJob = async (req, res) => {
         }, requestId);
       }
       
-      // Verify that the company actually exists in the database
-      const company = await Company.findById(recruiterWithCompany.company._id);
+      // Verify the company exists
+      const company = await Company.findById(recruiter.company);
       if (!company) {
-        logWarn('Recruiter\'s company does not exist in database', {
+        logWarn('Recruiter company not found', {
           requestId,
           userId: req.user.id,
-          companyId: recruiterWithCompany.company._id
+          companyId: recruiter.company
         });
-        return sendErrorResponse(res, 'COMPANY_001', {
-          message: 'Recruiter\'s company profile is invalid or has been deleted'
+        return sendErrorResponse(res, 'JOB_004', {
+          message: 'Recruiter company profile not found'
         }, requestId);
       }
       
-      sanitizedData.company = recruiterWithCompany.company._id;
+      sanitizedData.company = recruiter.company;
     } else if (req.user.role === "admin") {
       // Admin can specify company
       if (!req.body.company) {
@@ -130,21 +130,6 @@ export const createJob = async (req, res) => {
         });
         return sendErrorResponse(res, 'JOB_001', { field: 'company', message: 'Company is required for admin job creation' }, requestId);
       }
-      
-      // Verify that the specified company exists
-      const company = await Company.findById(req.body.company);
-      if (!company) {
-        logWarn('Specified company does not exist', {
-          requestId,
-          userId: req.user.id,
-          companyId: req.body.company
-        });
-        return sendErrorResponse(res, 'COMPANY_001', {
-          field: 'company',
-          message: 'The specified company does not exist'
-        }, requestId);
-      }
-      
       sanitizedData.company = req.body.company;
     }
 
@@ -161,13 +146,6 @@ export const createJob = async (req, res) => {
     const applicationDeadline = new Date();
     applicationDeadline.setDate(applicationDeadline.getDate() + defaultApplicationDeadlineDays);
     sanitizedData.applicationDeadline = applicationDeadline;
-
-    // Ensure application deadline is not after expiration date
-    if (sanitizedData.applicationDeadline > sanitizedData.expiresAt) {
-      sanitizedData.applicationDeadline = new Date(sanitizedData.expiresAt);
-      // Set it to one day before expiration
-      sanitizedData.applicationDeadline.setDate(sanitizedData.applicationDeadline.getDate() - 1);
-    }
 
     // Set other default values
     sanitizedData.jobType = req.body.jobType || "internship";
