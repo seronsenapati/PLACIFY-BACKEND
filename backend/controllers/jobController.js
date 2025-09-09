@@ -3,7 +3,7 @@ import Job from "../models/Job.js";
 import Company from "../models/Company.js";
 import User from "../models/User.js";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
-import { logInfo, logError } from "../utils/logger.js";
+import { logInfo, logError, logWarn } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
 import xss from 'xss';
 
@@ -106,6 +106,20 @@ export const createJob = async (req, res) => {
           message: 'Recruiters must create a company profile before posting jobs'
         }, requestId);
       }
+      
+      // Verify that the company actually exists in the database
+      const company = await Company.findById(recruiterWithCompany.company._id);
+      if (!company) {
+        logWarn('Recruiter\'s company does not exist in database', {
+          requestId,
+          userId: req.user.id,
+          companyId: recruiterWithCompany.company._id
+        });
+        return sendErrorResponse(res, 'COMPANY_001', {
+          message: 'Recruiter\'s company profile is invalid or has been deleted'
+        }, requestId);
+      }
+      
       sanitizedData.company = recruiterWithCompany.company._id;
     } else if (req.user.role === "admin") {
       // Admin can specify company
@@ -116,6 +130,21 @@ export const createJob = async (req, res) => {
         });
         return sendErrorResponse(res, 'JOB_001', { field: 'company', message: 'Company is required for admin job creation' }, requestId);
       }
+      
+      // Verify that the specified company exists
+      const company = await Company.findById(req.body.company);
+      if (!company) {
+        logWarn('Specified company does not exist', {
+          requestId,
+          userId: req.user.id,
+          companyId: req.body.company
+        });
+        return sendErrorResponse(res, 'COMPANY_001', {
+          field: 'company',
+          message: 'The specified company does not exist'
+        }, requestId);
+      }
+      
       sanitizedData.company = req.body.company;
     }
 
@@ -132,6 +161,13 @@ export const createJob = async (req, res) => {
     const applicationDeadline = new Date();
     applicationDeadline.setDate(applicationDeadline.getDate() + defaultApplicationDeadlineDays);
     sanitizedData.applicationDeadline = applicationDeadline;
+
+    // Ensure application deadline is not after expiration date
+    if (sanitizedData.applicationDeadline > sanitizedData.expiresAt) {
+      sanitizedData.applicationDeadline = new Date(sanitizedData.expiresAt);
+      // Set it to one day before expiration
+      sanitizedData.applicationDeadline.setDate(sanitizedData.applicationDeadline.getDate() - 1);
+    }
 
     // Set other default values
     sanitizedData.jobType = req.body.jobType || "internship";
