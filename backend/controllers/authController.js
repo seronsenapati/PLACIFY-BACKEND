@@ -2,6 +2,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Company from "../models/Company.js"; // Add this import
 import dotenv from "dotenv";
 import sendResponse from "../utils/sendResponse.js";
 
