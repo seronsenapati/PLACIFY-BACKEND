@@ -1,4 +1,5 @@
 import Company from "../models/Company.js";
+import User from "../models/User.js";
 import sendResponse from "../utils/sendResponse.js";
 import validateFields from "../utils/validateFields.js";
 import { validateCompanyFields } from "../utils/validateAdvancedFields.js";
@@ -201,6 +202,9 @@ export const createCompany = async (req, res) => {
     });
 
     const company = await Company.create(companyData);
+    
+    // Update the user's company field to link to this company
+    await User.findByIdAndUpdate(req.user.id, { company: company._id });
     
     // Log activity
     await company.logActivity("created", req.user.id);
@@ -782,6 +786,9 @@ export const deleteCompanyById = async (req, res) => {
         requestId
       );
     }
+
+    // Remove company reference from user
+    await User.findByIdAndUpdate(company.createdBy, { $unset: { company: "" } });
 
     await Company.findByIdAndDelete(req.params.id);
 
