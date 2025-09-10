@@ -167,7 +167,7 @@ export const createCompany = async (req, res) => {
     if (location) companyData.location = location;
     if (industry) companyData.industry = industry;
     if (size) companyData.size = size;
-    if (employeeCount) companyData.employeeCount = employeeCount;
+    if (employeeCount !== undefined && employeeCount !== null) companyData.employeeCount = employeeCount;
     if (socialMedia) companyData.socialMedia = socialMedia;
 
     const company = await Company.create(companyData);
@@ -195,6 +195,18 @@ export const createCompany = async (req, res) => {
       requestId,
       userId: req.user.id
     });
+    
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      return sendResponse(
+        res,
+        409,
+        false,
+        "A company with this name already exists",
+        null,
+        requestId
+      );
+    }
     
     return sendResponse(
       res,
@@ -599,6 +611,18 @@ export const updateCompanyById = async (req, res) => {
       userId: req.user.id,
       companyId: req.params.id
     });
+    
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      return sendResponse(
+        res,
+        409,
+        false,
+        "A company with this name already exists",
+        null,
+        requestId
+      );
+    }
     
     return sendResponse(
       res,
