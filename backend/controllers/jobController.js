@@ -6,6 +6,8 @@ import { sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js
 import { logInfo, logError, logWarn } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
 import xss from 'xss';
+import cloudinary from "../utils/cloudinary.js";
+import streamifier from "streamifier";
 
 // Helper function to sanitize input
 const sanitizeInput = (input) => {

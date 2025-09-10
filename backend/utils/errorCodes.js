@@ -169,6 +169,12 @@ export const ERROR_CODES = {
     technicalMessage: 'Uploaded file size exceeds the maximum allowed limit',
     httpStatus: 400
   },
+  VALIDATION_001: {
+    code: 'VALIDATION_001',
+    userMessage: 'Validation failed for one or more fields',
+    technicalMessage: 'Input data failed validation checks',
+    httpStatus: 400
+  },
 
   // System Errors (SYS_xxx)
   SYS_001: {
