@@ -3,6 +3,7 @@ import {
   registerUser,
   loginUser,
   logoutUser,
+  getCurrentUser
 } from "../controllers/authController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -33,5 +34,12 @@ router.post("/login", validateLogin, loginUser);
  * @access  Private
  */
 router.post("/logout", protect, logoutUser);
+
+/**
+ * @route   GET /api/auth/me
+ * @desc    Get current user data
+ * @access  Private
+ */
+router.get("/me", protect, getCurrentUser);
 
 export default router;

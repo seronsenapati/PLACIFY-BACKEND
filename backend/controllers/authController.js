@@ -184,3 +184,45 @@ export const logoutUser = (req, res) => {
     return sendResponse(res, 500, false, "Server Error");
   }
 };
+
+// GET CURRENT USER
+export const getCurrentUser = async (req, res) => {
+  try {
+    console.log("GET Current User request:", { userId: req.user._id });
+
+    const user = await User.findById(req.user._id).select("-password -__v");
+    if (!user) {
+      console.log("User not found:", req.user._id);
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    // For recruiters, also populate company information
+    if (user.role === "recruiter" && user.company) {
+      const company = await Company.findById(user.company).select(
+        "name location desc website logo createdAt updatedAt"
+      );
+
+      console.log("Recruiter user fetched with company:", {
+        userId: user._id,
+        hasCompany: !!company,
+      });
+
+      return sendResponse(res, 200, true, "User fetched", {
+        user: {
+          ...user.toObject(),
+          company: company || null,
+        }
+      });
+    }
+
+    console.log("User fetched:", {
+      userId: user._id,
+      role: user.role,
+    });
+
+    return sendResponse(res, 200, true, "User fetched", { user });
+  } catch (err) {
+    console.error("🔴 [Get Current User Error]:", err);
+    return sendResponse(res, 500, false, "Server error");
+  }
+};
