@@ -5,22 +5,22 @@ const companySchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
-      minlength: 2,
-      maxlength: 100,
+      required: [true, "Company name is required"],
+      minlength: [2, "Company name must be at least 2 characters"],
+      maxlength: [100, "Company name cannot exceed 100 characters"],
       // Add unique constraint to prevent duplicate company names
       unique: true,
       trim: true
     },
     desc: {
       type: String,
-      required: true,
-      minlength: 10,
-      maxlength: 1000,
+      required: [true, "Company description is required"],
+      minlength: [10, "Description must be at least 10 characters"],
+      maxlength: [1000, "Description cannot exceed 1000 characters"],
     },
     website: {
       type: String,
-      required: true,
+      required: [true, "Company website is required"],
       match: [
         /^(https?:\/\/)?([\w\-]+\.)+[a-z]{2,}(:\d{1,5})?(\/.*)?$/i,
         "Please enter a valid website URL",
@@ -68,7 +68,7 @@ const companySchema = new mongoose.Schema(
     // Add employee count field
     employeeCount: {
       type: Number,
-      min: 0
+      min: [0, "Employee count cannot be negative"]
     },
     // Add social media links
     socialMedia: {
@@ -135,7 +135,7 @@ const companySchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: [true, "Created by user is required"],
     },
     jobs: [
       {
@@ -159,6 +159,9 @@ if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'tru
   companySchema.index({ averageRating: -1 }, { background: true });
   companySchema.index({ "activityLog.timestamp": -1 }, { background: true });
 }
+
+// Ensure indexes are created in development as well for testing
+companySchema.index({ name: 1 });
 
 // Static method to get company statistics
 companySchema.statics.getStats = async function() {

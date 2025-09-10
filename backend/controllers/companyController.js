@@ -7,6 +7,7 @@ import streamifier from "streamifier";
 import { v4 as uuidv4 } from 'uuid';
 import { logInfo, logError, logWarn } from "../utils/logger.js";
 import { getErrorByCode } from "../utils/errorCodes.js";
+import mongoose from "mongoose";
 
 // POST - Create a new company
 export const createCompany = async (req, res) => {
@@ -36,6 +37,7 @@ export const createCompany = async (req, res) => {
       );
     }
 
+    // Validate required fields
     const { isValid, missingFields } = validateFields(
       ["name", "desc", "website"],
       req.body
@@ -60,6 +62,7 @@ export const createCompany = async (req, res) => {
 
     const { name, desc, website, location, industry, size, employeeCount, socialMedia } = req.body;
 
+    // Validate field formats
     const fieldErrors = validateCompanyFields({ website, socialMedia });
     if (fieldErrors.length > 0) {
       logWarn("Company creation failed - validation errors", {
@@ -155,6 +158,23 @@ export const createCompany = async (req, res) => {
       }
     }
 
+    // Validate createdBy field as a MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.user.id)) {
+      logError("Invalid createdBy field - not a valid ObjectId", {
+        requestId,
+        userId: req.user.id
+      });
+      
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid user ID format",
+        null,
+        requestId
+      );
+    }
+
     const companyData = {
       name,
       desc,
@@ -169,6 +189,16 @@ export const createCompany = async (req, res) => {
     if (size) companyData.size = size;
     if (employeeCount !== undefined && employeeCount !== null) companyData.employeeCount = employeeCount;
     if (socialMedia) companyData.socialMedia = socialMedia;
+
+    logInfo("Creating company with data", {
+      requestId,
+      userId: req.user.id,
+      companyData: {
+        ...companyData,
+        // Don't log sensitive data like the actual user ID
+        createdBy: typeof companyData.createdBy
+      }
+    });
 
     const company = await Company.create(companyData);
     
@@ -193,7 +223,9 @@ export const createCompany = async (req, res) => {
   } catch (error) {
     logError("Company creation failed", error, {
       requestId,
-      userId: req.user.id
+      userId: req.user.id,
+      errorMessage: error.message,
+      errorStack: error.stack
     });
     
     // Handle MongoDB duplicate key error
@@ -203,6 +235,19 @@ export const createCompany = async (req, res) => {
         409,
         false,
         "A company with this name already exists",
+        null,
+        requestId
+      );
+    }
+    
+    // Handle MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return sendResponse(
+        res,
+        400,
+        false,
+        `Validation error: ${validationErrors.join(', ')}`,
         null,
         requestId
       );
@@ -581,6 +626,22 @@ export const updateCompanyById = async (req, res) => {
       if (socialMedia.instagram !== undefined) company.socialMedia.instagram = socialMedia.instagram;
     }
 
+    logInfo("Updating company with data", {
+      requestId,
+      userId: req.user.id,
+      companyId: company._id,
+      updateData: {
+        name: name !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        desc: desc !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        website: website !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        location: location !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        industry: industry !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        size: size !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        employeeCount: employeeCount !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]",
+        socialMedia: socialMedia !== undefined ? "[PROVIDED]" : "[NOT_PROVIDED]"
+      }
+    });
+
     await company.save();
     
     // Log activity
@@ -609,7 +670,9 @@ export const updateCompanyById = async (req, res) => {
     logError("Company update failed", error, {
       requestId,
       userId: req.user.id,
-      companyId: req.params.id
+      companyId: req.params.id,
+      errorMessage: error.message,
+      errorStack: error.stack
     });
     
     // Handle MongoDB duplicate key error
@@ -619,6 +682,19 @@ export const updateCompanyById = async (req, res) => {
         409,
         false,
         "A company with this name already exists",
+        null,
+        requestId
+      );
+    }
+    
+    // Handle MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return sendResponse(
+        res,
+        400,
+        false,
+        `Validation error: ${validationErrors.join(', ')}`,
         null,
         requestId
       );
