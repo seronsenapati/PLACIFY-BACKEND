@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Job from "../models/Job.js";
 import Company from "../models/Company.js";
 import User from "../models/User.js";
+import Application from "../models/Application.js";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
 import { logInfo, logError, logWarn } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
