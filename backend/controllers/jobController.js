@@ -1244,3 +1244,142 @@ export const getBookmarkedJobs = async (req, res) => {
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };
+
+// Generate job description using AI
+export const generateJobDescription = async (req, res) => {
+  const requestId = uuidv4();
+  
+  logInfo('AI job description generation initiated', {
+    requestId,
+    userId: req.user.id
+  });
+
+  try {
+    // Validate user role
+    if (req.user.role !== "recruiter" && req.user.role !== "admin") {
+      logWarn('Unauthorized AI job description generation attempt', {
+        requestId,
+        userId: req.user.id,
+        role: req.user.role
+      });
+      return sendErrorResponse(res, 'AUTH_005', {}, requestId);
+    }
+
+    // Validate required fields
+    const { title, role, location, jobType, experienceLevel, isRemote, skills } = req.body;
+    
+    if (!title || !role) {
+      logWarn('Missing required fields for AI job description generation', {
+        requestId,
+        userId: req.user.id,
+        missingFields: !title ? 'title' : !role ? 'role' : null
+      });
+      return sendErrorResponse(res, 'JOB_001', {
+        missingFields: {
+          title: !title,
+          role: !role
+        }
+      }, requestId);
+    }
+
+    // Sanitize inputs
+    const sanitizedData = {
+      title: sanitizeInput(title),
+      role: sanitizeInput(role),
+      location: location ? sanitizeInput(location) : '',
+      jobType: jobType || "internship",
+      experienceLevel: experienceLevel || "entry",
+      isRemote: isRemote === true,
+      skills: sanitizeStringArray(skills || [])
+    };
+
+    // Generate job description using a template-based approach
+    // In a real implementation, this would call an AI service like OpenAI
+    const generateDescription = () => {
+      const jobTypes = {
+        "internship": "internship opportunity",
+        "full-time": "full-time position",
+        "part-time": "part-time role",
+        "contract": "contract position"
+      };
+
+      const experienceLevels = {
+        "entry": "entry-level",
+        "mid": "mid-level",
+        "senior": "senior-level",
+        "lead": "lead-level"
+      };
+
+      const workType = sanitizedData.isRemote ? "remote" : "onsite";
+      const jobTypeDesc = jobTypes[sanitizedData.jobType] || "position";
+      const experienceDesc = experienceLevels[sanitizedData.experienceLevel] || "entry-level";
+
+      let description = `We are seeking a talented ${sanitizedData.role} for a ${experienceDesc} ${jobTypeDesc} in our team. `;
+      
+      if (sanitizedData.location) {
+        description += `This ${workType} position is based in ${sanitizedData.location}. `;
+      } else if (sanitizedData.isRemote) {
+        description += "This is a fully remote position. ";
+      }
+
+      description += `\n\nKey Responsibilities:\n`;
+      description += `- Collaborate with cross-functional teams to deliver high-quality solutions\n`;
+      description += `- Participate in the full development lifecycle from concept to deployment\n`;
+      description += `- Write clean, maintainable, and efficient code\n`;
+      description += `- Troubleshoot, debug and resolve issues as they arise\n`;
+      description += `- Participate in code reviews and contribute to team knowledge sharing\n`;
+
+      if (sanitizedData.skills && sanitizedData.skills.length > 0) {
+        description += `\nRequired Skills:\n`;
+        sanitizedData.skills.forEach(skill => {
+          description += `- ${skill}\n`;
+        });
+      } else {
+        description += `\nRequired Skills:\n`;
+        description += `- Relevant experience in the field\n`;
+        description += `- Strong problem-solving abilities\n`;
+        description += `- Excellent communication skills\n`;
+      }
+
+      description += `\nQualifications:\n`;
+      description += `- Bachelor's degree in Computer Science, Engineering, or related field (or equivalent experience)\n`;
+      description += `- Proven experience in relevant technologies\n`;
+      description += `- Ability to work independently and as part of a team\n`;
+      description += `- Strong analytical and problem-solving skills\n`;
+
+      description += `\nWhat We Offer:\n`;
+      description += `- Competitive salary and benefits package\n`;
+      description += `- Opportunity to work with cutting-edge technologies\n`;
+      description += `- Collaborative and innovative work environment\n`;
+      description += `- Professional development and growth opportunities\n`;
+      description += `- Work-life balance and flexible working arrangements\n`;
+
+      description += `\nJoin our dynamic team and help us build the future of technology!`;
+
+      return description;
+    };
+
+    const generatedDescription = generateDescription();
+
+    logInfo('AI job description generated successfully', {
+      requestId,
+      userId: req.user.id,
+      title: sanitizedData.title,
+      role: sanitizedData.role
+    });
+
+    return sendSuccessResponse(
+      res,
+      "Job description generated successfully",
+      { description: generatedDescription },
+      200,
+      requestId
+    );
+  } catch (error) {
+    logError("AI job description generation error", error, {
+      requestId,
+      userId: req.user.id
+    });
+    return sendErrorResponse(res, 'SYS_001', {}, requestId);
+  }
+};

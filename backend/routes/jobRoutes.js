@@ -9,7 +9,8 @@ import {
   applyToJob,
   getRecruiterJobs,
   getJobStats,
-  getBookmarkedJobs
+  getBookmarkedJobs,
+  generateJobDescription
 } from "../controllers/jobController.js";
 import protect from "../middleware/authMiddleware.js";
 import validateRequest from "../middleware/validate.js";
@@ -44,6 +45,28 @@ router.post(
   ],
   validateRequest,
   createJob
+);
+
+/**
+ * @route   POST /api/jobs/generate-description
+ * @desc    Generate job description using AI
+ * @access  Private (Recruiters & Admins)
+ */
+router.post(
+  "/generate-description",
+  protect,
+  isRecruiterOrAdmin,
+  generalApiLimiter,
+  [
+    body("title").notEmpty().withMessage("Title is required").trim(),
+    body("role").notEmpty().withMessage("Role is required").trim(),
+    body("location").optional().trim(),
+    body("jobType").optional().isIn(["internship", "full-time", "part-time", "contract"]).withMessage("Invalid job type"),
+    body("experienceLevel").optional().isIn(["entry", "mid", "senior", "lead"]).withMessage("Invalid experience level"),
+    body("skills").optional().isArray().withMessage("Skills must be an array")
+  ],
+  validateRequest,
+  generateJobDescription
 );
 
 /**
