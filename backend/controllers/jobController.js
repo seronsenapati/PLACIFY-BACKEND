@@ -100,13 +100,26 @@ export const createJob = async (req, res) => {
     if (req.user.role === "recruiter") {
       // Check if recruiter has a company
       if (!recruiter.company) {
-        logWarn('Recruiter does not have a company profile', {
-          requestId,
-          userId: req.user.id
-        });
-        return sendErrorResponse(res, 'JOB_004', {
-          message: 'Recruiters must create a company profile before posting jobs'
-        }, requestId);
+        // Try to find company by createdBy field as fallback
+        const company = await Company.findOne({ createdBy: recruiter._id });
+        if (company) {
+          // Update recruiter with company reference
+          recruiter.company = company._id;
+          await recruiter.save();
+          logInfo('Recruiter company reference restored', {
+            requestId,
+            userId: req.user.id,
+            companyId: company._id
+          });
+        } else {
+          logWarn('Recruiter does not have a company profile', {
+            requestId,
+            userId: req.user.id
+          });
+          return sendErrorResponse(res, 'JOB_004', {
+            message: 'Recruiters must create a company profile before posting jobs'
+          }, requestId);
+        }
       }
       
       // Verify the company exists

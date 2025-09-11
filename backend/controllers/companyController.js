@@ -204,8 +204,58 @@ export const createCompany = async (req, res) => {
     const company = await Company.create(companyData);
     
     // Update the user's company field to link to this company
-    await User.findByIdAndUpdate(req.user.id, { company: company._id });
-    
+    try {
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user.id, 
+        { company: company._id },
+        { new: true, runValidators: true }
+      );
+      
+      if (!updatedUser) {
+        logWarn("Failed to update user with company reference - user not found", {
+          requestId,
+          userId: req.user.id,
+          companyId: company._id
+        });
+        
+        // Delete the company since we couldn't associate it with the user
+        await Company.findByIdAndDelete(company._id);
+        
+        return sendResponse(
+          res,
+          500,
+          false,
+          "Failed to associate company with user",
+          null,
+          requestId
+        );
+      }
+      
+      logInfo("User updated with company reference", {
+        requestId,
+        userId: req.user.id,
+        companyId: company._id
+      });
+    } catch (updateError) {
+      logError("Failed to update user with company reference", updateError, {
+        requestId,
+        userId: req.user.id,
+        companyId: company._id
+      });
+      
+      // Delete the company since we couldn't associate it with the user
+      await Company.findByIdAndDelete(company._id);
+      
+      return sendResponse(
+        res,
+        500,
+        false,
+        "Failed to associate company with user",
+        null,
+        requestId
+      );
+    }
+
     // Log activity
     await company.logActivity("created", req.user.id);
 

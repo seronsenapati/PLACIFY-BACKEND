@@ -170,6 +170,22 @@ export const getProfile = async (req, res) => {
     }
 
     if (user.role === "recruiter") {
+      // If user doesn't have company field but is a recruiter, try to find their company
+      if (!user.company) {
+        console.log("Recruiter missing company field, searching for associated company");
+        const company = await Company.findOne({ createdBy: user._id }).select(
+          "name location desc website logo createdAt updatedAt"
+        );
+        
+        if (company) {
+          console.log("Found company for recruiter, updating user profile");
+          // Update user with company reference
+          user.company = company._id;
+          await user.save();
+        }
+      }
+      
+      // Now fetch the company details
       const company = await Company.findById(user.company).select(
         "name location desc website logo createdAt updatedAt"
       );
@@ -177,6 +193,7 @@ export const getProfile = async (req, res) => {
       console.log("Recruiter profile fetched:", {
         userId: user._id,
         hasCompany: !!company,
+        companyId: user.company
       });
 
       return sendResponse(res, 200, true, "Profile fetched", {
