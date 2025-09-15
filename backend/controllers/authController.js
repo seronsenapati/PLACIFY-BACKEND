@@ -109,7 +109,11 @@ export const registerUser = async (req, res) => {
 
 // LOGIN USER
 export const loginUser = async (req, res) => {
+  // Set a timeout for the login request
+  req.setTimeout(15000); // 15 seconds
+  
   try {
+    console.log("Login request received:", req.body);
     let { email, password } = req.body;
     email = normalizeEmail(email);
 
@@ -171,6 +175,13 @@ export const loginUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Login Error:", error);
+    // Provide more detailed error information in development
+    if (process.env.NODE_ENV === "development") {
+      return sendResponse(res, 500, false, "Server Error", { 
+        error: error.message, 
+        stack: error.stack 
+      });
+    }
     return sendResponse(res, 500, false, "Server Error");
   }
 };
