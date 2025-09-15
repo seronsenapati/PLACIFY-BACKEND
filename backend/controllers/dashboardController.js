@@ -3,6 +3,7 @@ import Application from "../models/Application.js";
 import Job from "../models/Job.js";
 import User from "../models/User.js";
 import Company from "../models/Company.js";
+import Notification from "../models/Notification.js";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/sendResponse.js";
 import { logInfo, logError, logWarn } from "../utils/logger.js";
 import { v4 as uuidv4 } from 'uuid';
