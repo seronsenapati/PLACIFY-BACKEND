@@ -102,10 +102,12 @@ const startServer = async () => {
       // Import cron jobs dynamically
       const { default: startAutoCleanupCron } = await import('./cronJobs/autoCleanup.js');
       const { startRecruiterNotificationCron } = await import('./cronJobs/recruiterNotifications.js');
+      const { scheduleJobExpirationChecker } = await import('./utils/jobExpirationChecker.js');
       
       // Start cron jobs
       startAutoCleanupCron();
       startRecruiterNotificationCron();
+      scheduleJobExpirationChecker();
     } else {
       console.log("⏭️  Cron jobs skipped (not in production and not explicitly enabled)");
     }

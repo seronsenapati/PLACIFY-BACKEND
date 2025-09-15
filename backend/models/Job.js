@@ -256,5 +256,31 @@ jobSchema.statics.getExpiringSoonByRecruiter = async function(recruiterId, days 
   }));
 };
 
+// Instance method to check if job is expiring soon
+jobSchema.methods.isExpiringSoon = function(notificationDays) {
+  if (!this.expiresAt) return false;
+  
+  const notificationDate = new Date(this.expiresAt);
+  notificationDate.setDate(notificationDate.getDate() - (notificationDays || 3));
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  notificationDate.setHours(0, 0, 0, 0);
+  
+  return today.getTime() === notificationDate.getTime();
+};
+
+// Instance method to check if job is expired
+jobSchema.methods.isExpired = function() {
+  if (!this.expiresAt) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expireDate = new Date(this.expiresAt);
+  expireDate.setHours(0, 0, 0, 0);
+  
+  return today.getTime() > expireDate.getTime();
+};
+
 const Job = mongoose.model("Job", jobSchema);
 export default Job;
