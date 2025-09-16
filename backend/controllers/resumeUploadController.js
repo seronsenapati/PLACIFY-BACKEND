@@ -3,16 +3,20 @@ import multer from "multer";
 // Store file in memory buffer
 const storage = multer.memoryStorage();
 
-// Allow only PDF files
+// Allow PDF and DOCX files
 const fileFilter = (req, file, cb) => {
-  const isPdf =
-    file.mimetype === "application/pdf" &&
-    file.originalname.toLowerCase().endsWith(".pdf");
+  // Check for PDF files (both by MIME type and extension)
+  const isPdf = file.mimetype === "application/pdf" || 
+                file.originalname.toLowerCase().endsWith(".pdf");
+  
+  // Check for DOCX files
+  const isDocx = file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || 
+                 file.originalname.toLowerCase().endsWith(".docx");
 
-  if (isPdf) {
+  if (isPdf || isDocx) {
     cb(null, true);
   } else {
-    cb(new Error("Only PDF files are allowed"), false);
+    cb(new Error("Only PDF and DOCX files are allowed"), false);
   }
 };
 
@@ -20,7 +24,7 @@ const fileFilter = (req, file, cb) => {
 const uploadResume = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max (matching the validation in applyToJob)
 });
 
 export default uploadResume;

@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import xss from 'xss';
 import cloudinary from "../utils/cloudinary.js";
 import streamifier from "streamifier";
+// Import notification helper functions
+import { createNewApplicationNotification, createJobExpiredNotification } from "../utils/notificationHelpers.js";
 
 // Helper function to sanitize input
 const sanitizeInput = (input) => {
@@ -605,7 +607,7 @@ export const applyToJob = async (req, res) => {
       return sendErrorResponse(res, 'APP_005', {}, requestId);
     }
 
-    // Validate file type
+    // Validate file type (updated to match the new fileFilter)
     const allowedMimeTypes = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
