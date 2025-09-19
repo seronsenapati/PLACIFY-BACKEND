@@ -74,6 +74,9 @@ function validateEducation(education) {
   return education
     .filter((edu) => edu && typeof edu === "object")
     .map((edu) => {
+      // Log the education entry for debugging
+      console.log("Processing education entry:", edu);
+      
       // Validate required fields
       if (!edu.school || typeof edu.school !== "string") {
         console.log("Education validation: Invalid school field");
@@ -85,27 +88,59 @@ function validateEducation(education) {
         throw new Error("Degree field is required and must be a string");
       }
 
+      // Handle fromYear conversion if it's a string
+      let fromYear = edu.fromYear;
+      if (typeof fromYear === "string") {
+        fromYear = parseInt(fromYear, 10);
+      }
+
       if (
-        !edu.fromYear ||
-        typeof edu.fromYear !== "number" ||
-        edu.fromYear < 1900 ||
-        edu.fromYear > new Date().getFullYear() + 5
+        !fromYear ||
+        typeof fromYear !== "number" ||
+        isNaN(fromYear) ||
+        fromYear < 1900 ||
+        fromYear > new Date().getFullYear() + 5
       ) {
-        console.log("Education validation: Invalid fromYear field");
+        console.log("Education validation: Invalid fromYear field", {
+          fromYear: edu.fromYear,
+          parsedFromYear: fromYear,
+          type: typeof fromYear,
+          currentYear: new Date().getFullYear(),
+          maxYear: new Date().getFullYear() + 5
+        });
         throw new Error(
           "From year is required and must be a valid year between 1900 and " +
             (new Date().getFullYear() + 5)
         );
       }
 
+      // Handle toYear conversion if it's a string
+      let toYear = edu.toYear;
+      if (typeof toYear === "string") {
+        toYear = parseInt(toYear, 10);
+      }
+
+      // If toYear is null or "null" string, treat it as undefined
+      if (toYear === null || (typeof toYear === "string" && toYear.toLowerCase() === "null")) {
+        toYear = undefined;
+      }
+
       // Validate toYear if provided
       if (
-        edu.toYear !== undefined &&
-        (typeof edu.toYear !== "number" ||
-          edu.toYear < edu.fromYear ||
-          edu.toYear > new Date().getFullYear() + 5)
+        toYear !== undefined &&
+        (typeof toYear !== "number" ||
+          isNaN(toYear) ||
+          toYear < fromYear ||
+          toYear > new Date().getFullYear() + 5)
       ) {
-        console.log("Education validation: Invalid toYear field");
+        console.log("Education validation: Invalid toYear field", {
+          originalToYear: edu.toYear,
+          parsedToYear: toYear,
+          fromYear: fromYear,
+          type: typeof toYear,
+          currentYear: new Date().getFullYear(),
+          maxYear: new Date().getFullYear() + 5
+        });
         throw new Error(
           "To year must be a valid year between fromYear and " +
             (new Date().getFullYear() + 5)
@@ -115,8 +150,8 @@ function validateEducation(education) {
       return {
         school: edu.school.trim(),
         degree: edu.degree.trim(),
-        fromYear: edu.fromYear,
-        toYear: edu.toYear, // Will be undefined if not provided
+        fromYear: fromYear,
+        toYear: toYear, // Will be undefined if not provided
       };
     });
 }
@@ -226,6 +261,17 @@ export const updateProfile = async (req, res) => {
       file: !!req.file,
     });
 
+    // Log education data specifically if it exists
+    if (req.body.education) {
+      console.log("Education data received:", req.body.education);
+      try {
+        const parsedEducation = JSON.parse(req.body.education);
+        console.log("Parsed education data:", parsedEducation);
+      } catch (e) {
+        console.log("Education data is not JSON string:", req.body.education);
+      }
+    }
+
     const userId = req.user._id;
     const updates = req.body;
 
@@ -332,7 +378,19 @@ export const updateProfile = async (req, res) => {
 
       if (updates.education !== undefined) {
         try {
-          const validatedEducation = validateEducation(updates.education);
+          let educationData = updates.education;
+          
+          // If education is a string, try to parse it as JSON
+          if (typeof educationData === "string") {
+            try {
+              educationData = JSON.parse(educationData);
+            } catch (parseError) {
+              console.log("Education data parsing error:", parseError);
+              return sendResponse(res, 400, false, "Invalid education data format");
+            }
+          }
+          
+          const validatedEducation = validateEducation(educationData);
           user.education = validatedEducation;
         } catch (error) {
           console.log("Education validation error:", error.message);
