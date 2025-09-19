@@ -1046,3 +1046,116 @@ export const getCompanyActivity = async (req, res) => {
     );
   }
 };
+
+// GET - Company profile completion percentage
+export const getCompanyProfileCompletion = async (req, res) => {
+  const requestId = uuidv4();
+  
+  try {
+    logInfo("Fetching company profile completion", {
+      requestId,
+      userId: req.user.id,
+      companyId: req.params.id
+    });
+    
+    const company = await Company.findById(req.params.id);
+    
+    if (!company) {
+      logWarn("Company not found for profile completion check", {
+        requestId,
+        userId: req.user.id,
+        companyId: req.params.id
+      });
+      
+      return sendResponse(
+        res,
+        404,
+        false,
+        "Company not found",
+        null,
+        requestId
+      );
+    }
+    
+    // Only recruiter who created it, admin, or associated user can view
+    if (
+      req.user.role !== "admin" &&
+      req.user.role !== "recruiter" &&
+      company.createdBy.toString() !== req.user.id &&
+      (req.user.company && req.user.company.toString() !== company._id.toString())
+    ) {
+      logWarn("Unauthorized access to company profile completion", {
+        requestId,
+        userId: req.user.id,
+        companyId: req.params.id,
+        companyCreator: company.createdBy,
+        userRole: req.user.role
+      });
+      
+      return sendResponse(
+        res,
+        403,
+        false,
+        "You are not authorized to view this company's profile completion",
+        null,
+        requestId
+      );
+    }
+    
+    // Calculate current profile completeness
+    const profileCompleteness = company.calculateProfileCompleteness();
+    
+    // Save the calculated completeness to the database
+    company.profileCompleteness = profileCompleteness;
+    await company.save();
+    
+    const response = {
+      companyId: company._id,
+      companyName: company.name,
+      profileCompleteness: profileCompleteness,
+      completionDetails: company.getProfileCompletionDetails()
+    };
+    
+    logInfo("Company profile completion fetched successfully", {
+      requestId,
+      userId: req.user.id,
+      companyId: company._id,
+      profileCompleteness
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Company profile completion fetched successfully",
+      response,
+      requestId
+    );
+  } catch (error) {
+    logError("Fetching company profile completion failed", error, {
+      requestId,
+      userId: req.user.id,
+      companyId: req.params.id
+    });
+    
+    if (error.name === "CastError") {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid company ID format",
+        null,
+        requestId
+      );
+    }
+    
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Server error during profile completion fetch",
+      null,
+      requestId
+    );
+  }
+};

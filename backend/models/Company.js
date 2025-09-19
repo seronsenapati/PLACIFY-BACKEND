@@ -325,6 +325,48 @@ companySchema.methods.calculateProfileCompleteness = function() {
   return this.profileCompleteness;
 };
 
+// Instance method to get detailed profile completion information
+companySchema.methods.getProfileCompletionDetails = function() {
+  return {
+    requiredFields: {
+      name: {
+        completed: !!(this.name && this.name.length > 0),
+        weight: 20
+      },
+      description: {
+        completed: !!(this.desc && this.desc.length > 0),
+        weight: 20
+      },
+      website: {
+        completed: !!(this.website && this.website.length > 0),
+        weight: 20
+      }
+    },
+    optionalFields: {
+      location: {
+        completed: !!(this.location && this.location.length > 0),
+        weight: 5
+      },
+      industry: {
+        completed: !!(this.industry && this.industry.length > 0),
+        weight: 5
+      },
+      logo: {
+        completed: !!(this.logo && this.logo.length > 0),
+        weight: 5
+      },
+      socialMedia: {
+        completed: !!(this.socialMedia &&
+          (this.socialMedia.linkedin ||
+           this.socialMedia.twitter ||
+           this.socialMedia.facebook ||
+           this.socialMedia.instagram)),
+        weight: 5
+      }
+    }
+  };
+};
+
 // Instance method to update rating information
 companySchema.methods.updateRating = async function() {
   const ratingInfo = await Review.getAverageRating(this._id);

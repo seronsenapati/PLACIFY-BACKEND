@@ -7,7 +7,8 @@ import {
   deleteCompanyById,
   getCompanyStats,
   getCompanyAnalytics,
-  getCompanyActivity
+  getCompanyActivity,
+  getCompanyProfileCompletion
 } from "../controllers/companyController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -58,6 +59,9 @@ router.post(
 
 // GET a company by ID
 router.get("/:id", validateObjectId("id"), getCompanyById);
+
+// GET company profile completion
+router.get("/:id/profile-completion", validateObjectId("id"), getCompanyProfileCompletion);
 
 // GET company activity log
 router.get("/:id/activity", validateObjectId("id"), getCompanyActivity);

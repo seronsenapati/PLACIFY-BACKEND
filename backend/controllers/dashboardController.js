@@ -521,6 +521,13 @@ export const getRecruiterDashboardOverview = async (req, res) => {
       });
     }
 
+    // Calculate company profile completeness if not already calculated
+    let profileCompleteness = recruiter.company.profileCompleteness || 0;
+    if (profileCompleteness === 0) {
+      // Recalculate if it's 0 (might not have been calculated yet)
+      profileCompleteness = recruiter.company.calculateProfileCompleteness();
+    }
+
     // Dashboard overview data
     const overview = {
       jobs: {
@@ -538,7 +545,8 @@ export const getRecruiterDashboardOverview = async (req, res) => {
       company: {
         name: recruiter.company.name,
         id: recruiter.company._id,
-        profileCompleteness: recruiter.company.profileCompleteness || 0
+        profileCompleteness: profileCompleteness,
+        profileCompletionDetails: getCompanyProfileCompletionDetails(recruiter.company)
       },
       recentActivity: enhancedRecentJobs,
       notifications: notificationSummary,
@@ -557,7 +565,8 @@ export const getRecruiterDashboardOverview = async (req, res) => {
       requestId,
       recruiterId: req.user.id,
       totalJobs,
-      totalApplications
+      totalApplications,
+      profileCompleteness
     });
 
     return sendSuccessResponse(
@@ -585,6 +594,11 @@ export const getRecruiterDashboardOverview = async (req, res) => {
     return sendErrorResponse(res, 'SYS_001', {}, requestId);
   }
 };
+
+// Helper function to get detailed company profile completion information
+function getCompanyProfileCompletionDetails(company) {
+  return company.getProfileCompletionDetails();
+}
 
 /**
  * @desc Get detailed recruiter application analytics

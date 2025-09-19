@@ -64,6 +64,49 @@ function isProfileComplete(user) {
   }
 }
 
+// Clean education data to ensure proper formatting
+function cleanEducationData(education) {
+  if (!Array.isArray(education)) {
+    return [];
+  }
+
+  return education.map(edu => {
+    if (!edu || typeof edu !== "object") {
+      return edu;
+    }
+
+    // Create a copy of the education object
+    const cleanedEdu = { ...edu };
+
+    // Clean up fromYear
+    if (cleanedEdu.fromYear !== undefined) {
+      if (typeof cleanedEdu.fromYear === "string") {
+        const parsed = parseInt(cleanedEdu.fromYear, 10);
+        cleanedEdu.fromYear = isNaN(parsed) ? undefined : parsed;
+      }
+    }
+
+    // Clean up toYear
+    if (cleanedEdu.toYear !== undefined) {
+      if (typeof cleanedEdu.toYear === "string") {
+        if (cleanedEdu.toYear.trim() === "") {
+          cleanedEdu.toYear = undefined;
+        } else {
+          const parsed = parseInt(cleanedEdu.toYear, 10);
+          cleanedEdu.toYear = isNaN(parsed) ? undefined : parsed;
+        }
+      }
+      
+      // Handle null or "null" values
+      if (cleanedEdu.toYear === null || cleanedEdu.toYear === "null") {
+        cleanedEdu.toYear = undefined;
+      }
+    }
+
+    return cleanedEdu;
+  });
+}
+
 // Validate education data - Use 'school' field as per memory requirements
 function validateEducation(education) {
   if (!Array.isArray(education)) {
@@ -94,8 +137,16 @@ function validateEducation(education) {
         fromYear = parseInt(fromYear, 10);
       }
 
+      // Handle case where fromYear might be missing or invalid for existing entries
+      if (fromYear === undefined || fromYear === null || fromYear === "") {
+        console.log("Education validation: fromYear is missing or invalid", {
+          originalFromYear: edu.fromYear,
+          processedFromYear: fromYear
+        });
+        throw new Error("From year is required and must be a valid year");
+      }
+
       if (
-        !fromYear ||
         typeof fromYear !== "number" ||
         isNaN(fromYear) ||
         fromYear < 1900 ||
@@ -117,15 +168,21 @@ function validateEducation(education) {
       // Handle toYear conversion if it's a string
       let toYear = edu.toYear;
       if (typeof toYear === "string") {
-        toYear = parseInt(toYear, 10);
+        // Handle empty string case
+        if (toYear.trim() === "") {
+          toYear = undefined;
+        } else {
+          toYear = parseInt(toYear, 10);
+        }
       }
 
-      // If toYear is null or "null" string, treat it as undefined
-      if (toYear === null || (typeof toYear === "string" && toYear.toLowerCase() === "null")) {
+      // If toYear is null, empty string, or "null" string, treat it as undefined
+      if (toYear === null || toYear === "" || (typeof toYear === "string" && toYear.toLowerCase() === "null")) {
         toYear = undefined;
       }
 
-      // Validate toYear if provided
+      // Special handling for existing entries that might have invalid toYear values
+      // If toYear is provided but invalid, we'll set it to undefined to avoid validation errors
       if (
         toYear !== undefined &&
         (typeof toYear !== "number" ||
@@ -133,7 +190,7 @@ function validateEducation(education) {
           toYear < fromYear ||
           toYear > new Date().getFullYear() + 5)
       ) {
-        console.log("Education validation: Invalid toYear field", {
+        console.log("Education validation: Invalid toYear field, setting to undefined", {
           originalToYear: edu.toYear,
           parsedToYear: toYear,
           fromYear: fromYear,
@@ -141,10 +198,9 @@ function validateEducation(education) {
           currentYear: new Date().getFullYear(),
           maxYear: new Date().getFullYear() + 5
         });
-        throw new Error(
-          "To year must be a valid year between fromYear and " +
-            (new Date().getFullYear() + 5)
-        );
+        // Instead of throwing an error, we'll set toYear to undefined for existing entries
+        // This is more user-friendly for existing data that might have been entered incorrectly
+        toYear = undefined;
       }
 
       return {
@@ -380,21 +436,35 @@ export const updateProfile = async (req, res) => {
         try {
           let educationData = updates.education;
           
+          // Log the raw education data for debugging
+          console.log("Raw education data received:", educationData);
+          
           // If education is a string, try to parse it as JSON
           if (typeof educationData === "string") {
             try {
               educationData = JSON.parse(educationData);
             } catch (parseError) {
               console.log("Education data parsing error:", parseError);
-              return sendResponse(res, 400, false, "Invalid education data format");
+              return sendResponse(res, 400, false, "Invalid education data format: " + parseError.message);
             }
           }
           
-          const validatedEducation = validateEducation(educationData);
+          // Ensure educationData is an array
+          if (!Array.isArray(educationData)) {
+            console.log("Education data is not an array:", educationData);
+            return sendResponse(res, 400, false, "Education data must be an array");
+          }
+          
+          // Clean the education data before validation
+          const cleanedEducationData = cleanEducationData(educationData);
+          console.log("Cleaned education data:", cleanedEducationData);
+          
+          const validatedEducation = validateEducation(cleanedEducationData);
           user.education = validatedEducation;
         } catch (error) {
           console.log("Education validation error:", error.message);
-          return sendResponse(res, 400, false, error.message);
+          // Provide more specific error information
+          return sendResponse(res, 400, false, "Education validation failed: " + error.message);
         }
       }
 
