@@ -64,6 +64,17 @@ function isProfileComplete(user) {
   }
 }
 
+// Helper function to format education date range
+export function formatEducationDateRange(fromYear, toYear) {
+  if (!fromYear) return '';
+  
+  if (toYear === undefined || toYear === null) {
+    return `${fromYear} - Present`;
+  }
+  
+  return `${fromYear} - ${toYear}`;
+}
+
 // Clean education data to ensure proper formatting
 function cleanEducationData(education) {
   if (!Array.isArray(education)) {
@@ -87,6 +98,7 @@ function cleanEducationData(education) {
     }
 
     // Clean up toYear
+    // Handle the case where toYear might be null, undefined, or a string
     if (cleanedEdu.toYear !== undefined) {
       if (typeof cleanedEdu.toYear === "string") {
         if (cleanedEdu.toYear.trim() === "") {
@@ -96,12 +108,15 @@ function cleanEducationData(education) {
           cleanedEdu.toYear = isNaN(parsed) ? undefined : parsed;
         }
       }
-      
-      // Handle null or "null" values
-      if (cleanedEdu.toYear === null || cleanedEdu.toYear === "null") {
-        cleanedEdu.toYear = undefined;
-      }
     }
+    
+    // Handle null or "null" values (need to check this separately from the undefined check)
+    if (cleanedEdu.toYear === null || cleanedEdu.toYear === "null") {
+      cleanedEdu.toYear = undefined;
+    }
+    
+    // Add formatted date range for frontend display
+    cleanedEdu.dateRange = formatEducationDateRange(cleanedEdu.fromYear, cleanedEdu.toYear);
 
     return cleanedEdu;
   });
@@ -203,11 +218,15 @@ function validateEducation(education) {
         toYear = undefined;
       }
 
+      // Add formatted date range for frontend display
+      const dateRange = formatEducationDateRange(fromYear, toYear);
+
       return {
         school: edu.school.trim(),
         degree: edu.degree.trim(),
         fromYear: fromYear,
-        toYear: toYear, // Will be undefined if not provided
+        toYear: toYear, // Will be undefined if not provided (meaning "Present")
+        dateRange: dateRange
       };
     });
 }
@@ -258,6 +277,19 @@ export const getProfile = async (req, res) => {
     if (!user) {
       console.log("User not found:", req.user._id);
       return sendResponse(res, 404, false, "User not found");
+    }
+
+    // Add formatted date ranges to education entries
+    if (user.education && Array.isArray(user.education)) {
+      user.education = user.education.map(edu => {
+        if (edu && typeof edu === 'object') {
+          return {
+            ...edu,
+            dateRange: formatEducationDateRange(edu.fromYear, edu.toYear)
+          };
+        }
+        return edu;
+      });
     }
 
     if (user.role === "recruiter") {
@@ -443,6 +475,7 @@ export const updateProfile = async (req, res) => {
           if (typeof educationData === "string") {
             try {
               educationData = JSON.parse(educationData);
+              console.log("Parsed education data from string:", educationData);
             } catch (parseError) {
               console.log("Education data parsing error:", parseError);
               return sendResponse(res, 400, false, "Invalid education data format: " + parseError.message);
@@ -455,9 +488,21 @@ export const updateProfile = async (req, res) => {
             return sendResponse(res, 400, false, "Education data must be an array");
           }
           
+          // Log each education entry to see the exact data structure
+          console.log("Education entries before cleaning:");
+          educationData.forEach((entry, index) => {
+            console.log(`Entry ${index}:`, entry);
+          });
+          
           // Clean the education data before validation
           const cleanedEducationData = cleanEducationData(educationData);
           console.log("Cleaned education data:", cleanedEducationData);
+          
+          // Log each cleaned education entry to see the exact data structure
+          console.log("Education entries after cleaning:");
+          cleanedEducationData.forEach((entry, index) => {
+            console.log(`Entry ${index}:`, entry);
+          });
           
           const validatedEducation = validateEducation(cleanedEducationData);
           user.education = validatedEducation;
@@ -506,6 +551,19 @@ export const updateProfile = async (req, res) => {
 
     // Return updated user data (exclude sensitive fields)
     const updatedUser = await User.findById(userId).select("-password -__v");
+    
+    // Add formatted date ranges to education entries in the response
+    if (updatedUser.education && Array.isArray(updatedUser.education)) {
+      updatedUser.education = updatedUser.education.map(edu => {
+        if (edu && typeof edu === 'object') {
+          return {
+            ...edu,
+            dateRange: formatEducationDateRange(edu.fromYear, edu.toYear)
+          };
+        }
+        return edu;
+      });
+    }
 
     console.log("Profile updated successfully:", {
       userId: updatedUser._id,
