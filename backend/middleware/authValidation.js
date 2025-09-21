@@ -11,7 +11,7 @@ export const validateRegistration = (req, res, next) => {
     typeof password !== "string" ||
     typeof username !== "string"
   ) {
-    return sendResponse(res, 400, false, "Invalid input types");
+    return sendResponse(res, 400, false, "Invalid input types. All fields must be text.");
   }
 
   // Trim and normalize
@@ -22,12 +22,39 @@ export const validateRegistration = (req, res, next) => {
   role = role.trim().toLowerCase();
 
   // Required fields
-  if (!name || !email || !password || !username) {
+  if (!name) {
     return sendResponse(
       res,
       400,
       false,
-      "Name, username, email, and password are required"
+      "Please enter your full name."
+    );
+  }
+  
+  if (!username) {
+    return sendResponse(
+      res,
+      400,
+      false,
+      "Please choose a username."
+    );
+  }
+  
+  if (!email) {
+    return sendResponse(
+      res,
+      400,
+      false,
+      "Please enter your email address."
+    );
+  }
+  
+  if (!password) {
+    return sendResponse(
+      res,
+      400,
+      false,
+      "Please create a password."
     );
   }
 
@@ -38,7 +65,7 @@ export const validateRegistration = (req, res, next) => {
       res,
       400,
       false,
-      "Name must be 2-50 characters and contain only letters and spaces"
+      "Please enter a valid name (2-50 characters, letters and spaces only)."
     );
   }
 
@@ -49,7 +76,7 @@ export const validateRegistration = (req, res, next) => {
       res,
       400,
       false,
-      "Username must be 3-20 characters and contain only letters, numbers, or underscores"
+      "Username must be 3-20 characters and contain only letters, numbers, or underscores."
     );
   }
 
@@ -60,7 +87,7 @@ export const validateRegistration = (req, res, next) => {
       res,
       400,
       false,
-      "Please provide a valid email address"
+      "Please enter a valid email address (example: user@domain.com)."
     );
   }
 
@@ -72,7 +99,7 @@ export const validateRegistration = (req, res, next) => {
       res,
       400,
       false,
-      "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+      "Password must be at least 8 characters with uppercase, lowercase, number, and special character."
     );
   }
 
@@ -83,7 +110,7 @@ export const validateRegistration = (req, res, next) => {
       res,
       400,
       false,
-      `Invalid role. Role must be one of: ${allowedRoles.join(", ")}`
+      `Please select a valid role: ${allowedRoles.join(" or ")}.`
     );
   }
 
@@ -97,14 +124,18 @@ export const validateLogin = (req, res, next) => {
   let { email, password } = req.body;
 
   if (typeof email !== "string" || typeof password !== "string") {
-    return sendResponse(res, 400, false, "Invalid input types");
+    return sendResponse(res, 400, false, "Email and password must be text.");
   }
 
   email = email.trim().toLowerCase();
   password = password.trim();
 
-  if (!email || !password) {
-    return sendResponse(res, 400, false, "Email and password are required");
+  if (!email) {
+    return sendResponse(res, 400, false, "Please enter your email address.");
+  }
+  
+  if (!password) {
+    return sendResponse(res, 400, false, "Please enter your password.");
   }
 
   // Email format validation
@@ -114,7 +145,7 @@ export const validateLogin = (req, res, next) => {
       res,
       400,
       false,
-      "Please provide a valid email address"
+      "Please enter a valid email address (example: user@domain.com)."
     );
   }
 

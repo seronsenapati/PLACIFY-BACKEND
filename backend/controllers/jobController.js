@@ -66,15 +66,8 @@ export const createJob = async (req, res) => {
         userId: req.user.id,
         missingFields: !title ? 'title' : !role ? 'role' : !desc ? 'desc' : !location ? 'location' : salary === undefined ? 'salary' : !skills ? 'skills' : null
       });
-      return sendErrorResponse(res, 'JOB_001', {
-        missingFields: {
-          title: !title,
-          role: !role,
-          desc: !desc,
-          location: !location,
-          salary: salary === undefined,
-          skills: !skills
-        }
+      return sendErrorResponse(res, 'VAL_001', {
+        message: 'Please fill in all required fields: title, role, description, location, salary, and skills.'
       }, requestId);
     }
 
@@ -91,12 +84,18 @@ export const createJob = async (req, res) => {
 
     // Validate salary
     if (isNaN(sanitizedData.salary) || sanitizedData.salary < 0) {
-      return sendErrorResponse(res, 'JOB_002', { field: 'salary' }, requestId);
+      return sendErrorResponse(res, 'VAL_002', { 
+        field: 'salary',
+        message: 'Please enter a valid salary amount (positive number).'
+      }, requestId);
     }
 
     // Validate skills array
     if (!Array.isArray(sanitizedData.skills) || sanitizedData.skills.length === 0) {
-      return sendErrorResponse(res, 'JOB_002', { field: 'skills' }, requestId);
+      return sendErrorResponse(res, 'VAL_002', { 
+        field: 'skills',
+        message: 'Please provide at least one skill for this job.'
+      }, requestId);
     }
 
     // Get company from recruiter
@@ -120,7 +119,7 @@ export const createJob = async (req, res) => {
             userId: req.user.id
           });
           return sendErrorResponse(res, 'JOB_004', {
-            message: 'Recruiters must create a company profile before posting jobs'
+            message: 'Please create a company profile before posting jobs.'
           }, requestId);
         }
       }
@@ -134,7 +133,7 @@ export const createJob = async (req, res) => {
           companyId: recruiter.company
         });
         return sendErrorResponse(res, 'JOB_004', {
-          message: 'Recruiter company profile not found'
+          message: 'Your company profile was not found. Please create a new company profile.'
         }, requestId);
       }
       
@@ -146,7 +145,10 @@ export const createJob = async (req, res) => {
           requestId,
           userId: req.user.id
         });
-        return sendErrorResponse(res, 'JOB_001', { field: 'company', message: 'Company is required for admin job creation' }, requestId);
+        return sendErrorResponse(res, 'VAL_001', { 
+          field: 'company', 
+          message: 'Company is required for admin job creation. Please specify a company.' 
+        }, requestId);
       }
       sanitizedData.company = req.body.company;
     }

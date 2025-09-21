@@ -4,7 +4,7 @@ import {
   getCompanyReviews,
   updateReview,
   deleteReview,
-  voteOnReview
+  voteReview
 } from "../controllers/reviewController.js";
 
 import protect from "../middleware/authMiddleware.js";
@@ -58,10 +58,17 @@ router.post(
   protect,
   validateObjectId("reviewId"),
   [
-    body("vote").notEmpty().withMessage("Vote is required").isIn(["helpful"]).withMessage("Vote must be 'helpful'"),
+    body("vote").notEmpty().withMessage("Vote is required").custom((value) => {
+      // Accept both string and numeric values
+      const numericValue = typeof value === 'string' ? parseInt(value, 10) : value;
+      if (isNaN(numericValue) || (numericValue !== 1 && numericValue !== -1)) {
+        throw new Error("Vote must be 1 (helpful) or -1 (not helpful)");
+      }
+      return true;
+    }),
   ],
   validateRequest,
-  voteOnReview
+  voteReview
 );
 
 export default router;

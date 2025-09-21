@@ -30,7 +30,10 @@ export const updateApplicationStatus = async (req, res) => {
 
   // ✅ Validate status value
   if (!ALLOWED_STATUSES.includes(status)) {
-    return sendErrorResponse(res, 'APP_003', { allowedStatuses: ALLOWED_STATUSES }, requestId);
+    return sendErrorResponse(res, 'APP_003', { 
+      allowedStatuses: ALLOWED_STATUSES,
+      message: `Invalid status. Please select one of: ${ALLOWED_STATUSES.join(', ')}.`
+    }, requestId);
   }
 
   // ✅ Prevent recruiters from directly setting status to "withdrawn" (this is student-only)
@@ -42,7 +45,9 @@ export const updateApplicationStatus = async (req, res) => {
 
   // ✅ Validate MongoDB ObjectId
   if (!mongoose.Types.ObjectId.isValid(applicationId)) {
-    return sendErrorResponse(res, 'APP_006', {}, requestId);
+    return sendErrorResponse(res, 'APP_006', {
+      message: "Invalid application ID format. Please check the URL and try again."
+    }, requestId);
   }
 
   try {
@@ -52,14 +57,18 @@ export const updateApplicationStatus = async (req, res) => {
     );
 
     if (!application) {
-      return sendErrorResponse(res, 'APP_001', {}, requestId);
+      return sendErrorResponse(res, 'APP_001', {
+        message: "Application not found. It may have been deleted."
+      }, requestId);
     }
 
     const job = application.job;
 
     // ✅ Ensure recruiter owns the job
     if (job.createdBy.toString() !== req.user.id.toString()) {
-      return sendErrorResponse(res, 'APP_004', {}, requestId);
+      return sendErrorResponse(res, 'APP_004', {
+        message: "You don't have permission to update this application."
+      }, requestId);
     }
 
     // Check if status is already the same
@@ -126,7 +135,9 @@ export const updateApplicationStatus = async (req, res) => {
       applicationId,
       recruiterId: req.user.id
     });
-    return sendErrorResponse(res, 'SYS_001', {}, requestId);
+    return sendErrorResponse(res, 'SYS_001', {
+      message: "Something went wrong while updating the application status. Please try again later."
+    }, requestId);
   }
 };
 
@@ -148,7 +159,9 @@ export const withdrawApplication = async (req, res) => {
 
   // ✅ Validate MongoDB ObjectId
   if (!mongoose.Types.ObjectId.isValid(applicationId)) {
-    return sendErrorResponse(res, 'APP_006', {}, requestId);
+    return sendErrorResponse(res, 'APP_006', {
+      message: "Invalid application ID format. Please check the URL and try again."
+    }, requestId);
   }
 
   try {
@@ -156,17 +169,24 @@ export const withdrawApplication = async (req, res) => {
     const application = await Application.findById(applicationId).populate('job', 'title');
 
     if (!application) {
-      return sendErrorResponse(res, 'APP_001', {}, requestId);
+      return sendErrorResponse(res, 'APP_001', {
+        message: "Application not found. It may have been deleted."
+      }, requestId);
     }
 
     // ✅ Ensure student owns the application
     if (application.student.toString() !== req.user.id.toString()) {
-      return sendErrorResponse(res, 'APP_004', {}, requestId);
+      return sendErrorResponse(res, 'APP_004', {
+        message: "You don't have permission to withdraw this application."
+      }, requestId);
     }
 
     // ✅ Check if application can be withdrawn
     if (!application.canWithdraw()) {
-      return sendErrorResponse(res, 'APP_007', { currentStatus: application.status }, requestId);
+      return sendErrorResponse(res, 'APP_007', { 
+        currentStatus: application.status,
+        message: "This application cannot be withdrawn at its current status."
+      }, requestId);
     }
 
     // ✅ Withdraw the application
@@ -192,7 +212,9 @@ export const withdrawApplication = async (req, res) => {
       applicationId,
       studentId: req.user.id
     });
-    return sendErrorResponse(res, 'SYS_001', {}, requestId);
+    return sendErrorResponse(res, 'SYS_001', {
+      message: "Something went wrong while withdrawing the application. Please try again later."
+    }, requestId);
   }
 };
 

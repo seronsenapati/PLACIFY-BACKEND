@@ -32,7 +32,7 @@ export const createCompany = async (req, res) => {
         res,
         403,
         false,
-        "Only recruiters can post companies",
+        "Only recruiters can create company profiles. Please contact support if you believe this is an error.",
         null,
         requestId
       );
@@ -55,7 +55,7 @@ export const createCompany = async (req, res) => {
         res,
         400,
         false,
-        `Missing required fields: ${missingFields.join(", ")}`,
+        `Please fill in all required fields: ${missingFields.join(", ")}.`,
         null,
         requestId
       );
@@ -76,7 +76,7 @@ export const createCompany = async (req, res) => {
         res,
         400,
         false,
-        fieldErrors.join(", "),
+        `Please correct the following errors: ${fieldErrors.join(", ")}.`,
         null,
         requestId
       );
@@ -95,7 +95,7 @@ export const createCompany = async (req, res) => {
         res,
         409,
         false,
-        "A company with this name already exists",
+        "A company with this name already exists. Please choose a different name or contact support if you believe this is your company.",
         null,
         requestId
       );
@@ -152,7 +152,7 @@ export const createCompany = async (req, res) => {
           res,
           500,
           false,
-          "Failed to upload company logo",
+          "Failed to upload company logo. Please try again with a different image or contact support.",
           null,
           requestId
         );
@@ -170,7 +170,7 @@ export const createCompany = async (req, res) => {
         res,
         400,
         false,
-        "Invalid user ID format",
+        "Invalid user ID format. Please log out and log back in to refresh your session.",
         null,
         requestId
       );
@@ -288,7 +288,7 @@ export const createCompany = async (req, res) => {
         res,
         409,
         false,
-        "A company with this name already exists",
+        "A company with this name already exists. Please choose a different name.",
         null,
         requestId
       );
@@ -301,7 +301,7 @@ export const createCompany = async (req, res) => {
         res,
         400,
         false,
-        `Validation error: ${validationErrors.join(', ')}`,
+        `Please check your input: ${validationErrors.join(', ')}.`,
         null,
         requestId
       );
@@ -311,7 +311,7 @@ export const createCompany = async (req, res) => {
       res,
       500,
       false,
-      "Server error during company creation",
+      "Something went wrong while creating your company profile. Please try again later or contact support.",
       null,
       requestId
     );

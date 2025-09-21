@@ -13,7 +13,7 @@ export const protect = async (req, res, next) => {
     const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
 
     if (!token) {
-      return sendResponse(res, 401, false, "No token, authorization denied");
+      return sendResponse(res, 401, false, "Please log in to access this resource.");
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -21,11 +21,11 @@ export const protect = async (req, res, next) => {
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
-      return sendResponse(res, 401, false, "User not found");
+      return sendResponse(res, 401, false, "Account not found. Please register for a new account.");
     }
 
     if (!user.isActive) {
-      return sendResponse(res, 403, false, "This account has been deactivated");
+      return sendResponse(res, 403, false, "This account has been deactivated. Please contact support.");
     }
 
     req.user = user;
@@ -34,10 +34,10 @@ export const protect = async (req, res, next) => {
     console.error("JWT Error:", error.message);
 
     if (error.name === "TokenExpiredError") {
-      return sendResponse(res, 401, false, "Session expired. Please login again.");
+      return sendResponse(res, 401, false, "Your session has expired. Please log in again.");
     }
 
-    return sendResponse(res, 401, false, "Invalid or expired token");
+    return sendResponse(res, 401, false, "Invalid session. Please log in again.");
   }
 };
 
@@ -62,7 +62,7 @@ export const checkJobOwnership = async (req, res, next) => {
     const job = await Job.findById(req.params.id);
 
     if (!job) {
-      return sendResponse(res, 404, false, "Job not found");
+      return sendResponse(res, 404, false, "Job not found. It may have been removed or expired.");
     }
 
     if (req.user.role === "admin") {
@@ -75,7 +75,7 @@ export const checkJobOwnership = async (req, res, next) => {
         res,
         403,
         false,
-        "Not authorized to perform this action on this job"
+        "You don't have permission to modify this job."
       );
     }
 
@@ -87,7 +87,7 @@ export const checkJobOwnership = async (req, res, next) => {
       res,
       500,
       false,
-      "Server error during job ownership verification"
+      "Something went wrong. Please try again later."
     );
   }
 };

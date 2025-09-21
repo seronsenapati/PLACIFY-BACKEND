@@ -141,12 +141,12 @@ export const loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return sendResponse(res, 401, false, "Invalid credentials");
+      return sendResponse(res, 401, false, "No account found with this email address. Please check your email or register for a new account.");
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return sendResponse(res, 401, false, "Invalid credentials");
+      return sendResponse(res, 401, false, "Incorrect password. Please try again or reset your password.");
     }
 
     const token = jwt.sign(

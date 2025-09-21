@@ -577,75 +577,250 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-// DELETE Resume
-export const deleteResume = async (req, res) => {
+export const uploadProfilePhoto = async (req, res) => {
   try {
-    console.log("Delete resume request:", {
-      userId: req.user._id,
-      timestamp: new Date().toISOString(),
+    if (!req.file) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Please select a profile photo to upload."
+      );
+    }
+
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "placify_profile_photos",
+          resource_type: "image",
+          transformation: [
+            { width: 500, height: 500, crop: "limit" },
+            { quality: "auto" },
+          ],
+        },
+        (error, result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(error);
+          }
+        }
+      );
+      streamifier.createReadStream(req.file.buffer).pipe(stream);
     });
 
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return sendResponse(res, 404, false, "User not found");
-    }
-
-    if (!user.resume) {
-      return sendResponse(res, 400, false, "No resume found to delete");
-    }
-
-    const oldResumeUrl = user.resume;
-    console.log("Deleting resume:", oldResumeUrl);
-
-    // Extract public_id from Cloudinary URL for deletion
-    if (oldResumeUrl && oldResumeUrl.includes("cloudinary.com")) {
-      try {
-        // More robust public_id extraction
-        const urlParts = oldResumeUrl.split("/");
-        const versionIndex = urlParts.findIndex((part) => part.startsWith("v"));
-
-        let publicIdParts;
-        if (versionIndex > 0) {
-          // URL has version, get parts after version
-          publicIdParts = urlParts.slice(versionIndex + 1);
-        } else {
-          // No version, get last parts
-          publicIdParts = urlParts.slice(-2);
-        }
-
-        const filename = publicIdParts[publicIdParts.length - 1];
-        const folder =
-          publicIdParts.length > 1 ? publicIdParts[0] : "placify_resumes";
-        const publicId = `${folder}/${filename.split(".")[0]}`;
-
-        console.log("Attempting to delete from Cloudinary:", {
-          originalUrl: oldResumeUrl,
-          extractedPublicId: publicId,
-        });
-
-        const cloudinaryResult = await cloudinary.uploader.destroy(publicId, {
-          resource_type: "raw",
-        });
-
-        console.log("Cloudinary deletion result:", cloudinaryResult);
-      } catch (cloudinaryError) {
-        console.error("Error deleting from Cloudinary:", {
-          error: cloudinaryError.message,
-          stack: cloudinaryError.stack,
-          resumeUrl: oldResumeUrl,
-        });
-        // Continue with database update even if Cloudinary deletion fails
-      }
-    }
-
-    // Remove resume from user profile
+    // Update user with new profile photo URL
     const updatedUser = await User.findByIdAndUpdate(
-      req.user._id,
-      { $unset: { resume: 1 } },
-      { new: true, runValidators: true, select: "-password -__v" }
-    );
+      req.user.id,
+      { profilePhoto: result.secure_url },
+      { new: true, runValidators: true }
+    ).select("-password");
 
-    // Update profile completion status
+    // Check if profile is now complete
+    const profileCompleted = isProfileComplete(updatedUser);
+    if (profileCompleted !== updatedUser.profileCompleted) {
+      updatedUser.profileCompleted = profileCompleted;
+      await updatedUser.save();
+    }
+
+    console.log("Profile photo uploaded successfully:", {
+      userId: updatedUser._id,
+      profilePhoto: result.secure_url,
+      profileCompleted: updatedUser.profileCompleted,
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Profile photo uploaded successfully",
+      updatedUser
+    );
+  } catch (err) {
+    console.error("Upload Profile Photo Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
+    });
+    
+    // Handle Cloudinary upload errors
+    if (err.message && err.message.includes('Invalid image file')) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Please upload a valid image file (JPEG, PNG, GIF)."
+      );
+    }
+    
+    // Handle file size errors
+    if (err.message && err.message.includes('File size')) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Profile photo is too large. Please upload an image smaller than 5MB."
+      );
+    }
+    
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Something went wrong while uploading your profile photo. Please try again later."
+    );
+  }
+};
+
+export const deleteProfilePhoto = async (req, res) => {
+  try {
+    // Remove profile photo URL from user
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { profilePhoto: "" },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    // Check if profile is still complete
+    const profileCompleted = isProfileComplete(updatedUser);
+    if (profileCompleted !== updatedUser.profileCompleted) {
+      updatedUser.profileCompleted = profileCompleted;
+      await updatedUser.save();
+    }
+
+    console.log("Profile photo deleted successfully:", {
+      userId: updatedUser._id,
+      profileCompleted: updatedUser.profileCompleted,
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Profile photo deleted successfully",
+      updatedUser
+    );
+  } catch (err) {
+    console.error("Delete Profile Photo Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
+    });
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Something went wrong while deleting your profile photo. Please try again later."
+    );
+  }
+};
+
+export const uploadResume = async (req, res) => {
+  try {
+    if (!req.file) {
+      return sendResponse(res, 400, false, "Please select a resume to upload.");
+    }
+
+    // Validate file type
+    const allowedTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Please upload a valid resume file (PDF, DOC, or DOCX)."
+      );
+    }
+
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "placify_resumes",
+          resource_type: "raw",
+          use_filename: true,
+          unique_filename: false,
+        },
+        (error, result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(error);
+          }
+        }
+      );
+      streamifier.createReadStream(req.file.buffer).pipe(stream);
+    });
+
+    // Update user with new resume URL
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { resume: result.secure_url },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    // Check if profile is now complete
+    const profileCompleted = isProfileComplete(updatedUser);
+    if (profileCompleted !== updatedUser.profileCompleted) {
+      updatedUser.profileCompleted = profileCompleted;
+      await updatedUser.save();
+    }
+
+    console.log("Resume uploaded successfully:", {
+      userId: updatedUser._id,
+      resume: result.secure_url,
+      profileCompleted: updatedUser.profileCompleted,
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Resume uploaded successfully",
+      updatedUser
+    );
+  } catch (err) {
+    console.error("Upload Resume Error:", {
+      message: err.message,
+      stack: err.stack,
+      userId: req.user?._id,
+    });
+    
+    // Handle file size errors
+    if (err.message && (err.message.includes('File size') || err.http_code === 400)) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Resume file is too large. Please upload a file smaller than 5MB."
+      );
+    }
+    
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Something went wrong while uploading your resume. Please try again later."
+    );
+  }
+};
+
+export const deleteResume = async (req, res) => {
+  try {
+    // Remove resume URL from user
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { resume: "" },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    // Check if profile is still complete
     const profileCompleted = isProfileComplete(updatedUser);
     if (profileCompleted !== updatedUser.profileCompleted) {
       updatedUser.profileCompleted = profileCompleted;
@@ -670,9 +845,11 @@ export const deleteResume = async (req, res) => {
       stack: err.stack,
       userId: req.user?._id,
     });
-    return sendResponse(res, 500, false, "Server error", null, {
-      error: err.message,
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-    });
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Something went wrong while deleting your resume. Please try again later."
+    );
   }
 };

@@ -55,10 +55,18 @@ export const getNotifications = async (req, res) => {
     if (startDate || endDate) {
       filter.createdAt = {};
       if (startDate) {
-        filter.createdAt.$gte = new Date(startDate);
+        const startDateObj = new Date(startDate);
+        if (isNaN(startDateObj.getTime())) {
+          return sendResponse(res, 400, false, "Invalid start date format. Please use YYYY-MM-DD format.");
+        }
+        filter.createdAt.$gte = startDateObj;
       }
       if (endDate) {
-        filter.createdAt.$lte = new Date(endDate);
+        const endDateObj = new Date(endDate);
+        if (isNaN(endDateObj.getTime())) {
+          return sendResponse(res, 400, false, "Invalid end date format. Please use YYYY-MM-DD format.");
+        }
+        filter.createdAt.$lte = endDateObj;
       }
     }
 
@@ -107,7 +115,7 @@ export const getNotifications = async (req, res) => {
     );
   } catch (error) {
     console.error("🔴 [Notification Fetch Error]:", error.message);
-    return sendResponse(res, 500, false, "Failed to fetch notifications");
+    return sendResponse(res, 500, false, "Something went wrong while fetching your notifications. Please try again later.");
   }
 };
 
@@ -137,7 +145,7 @@ export const markAsRead = async (req, res) => {
       res,
       500,
       false,
-      "Failed to mark notifications as read"
+      "Something went wrong while marking notifications as read. Please try again later."
     );
   }
 };
@@ -150,7 +158,7 @@ export const markSingleAsRead = async (req, res) => {
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return sendResponse(res, 400, false, "Invalid notification ID");
+      return sendResponse(res, 400, false, "Invalid notification ID format. Please check the URL and try again.");
     }
 
     const notification = await Notification.findOneAndUpdate(
@@ -160,7 +168,7 @@ export const markSingleAsRead = async (req, res) => {
     );
 
     if (!notification) {
-      return sendResponse(res, 404, false, "Notification not found");
+      return sendResponse(res, 404, false, "Notification not found. It may have been deleted.");
     }
 
     return sendResponse(res, 200, true, "Notification marked as read", notification);
@@ -170,7 +178,7 @@ export const markSingleAsRead = async (req, res) => {
       res,
       500,
       false,
-      "Failed to mark notification as read"
+      "Something went wrong while marking the notification as read. Please try again later."
     );
   }
 };
@@ -188,7 +196,7 @@ export const deleteNotifications = async (req, res) => {
       // Validate all IDs
       const validIds = ids.filter(id => mongoose.Types.ObjectId.isValid(id));
       if (validIds.length === 0) {
-        return sendResponse(res, 400, false, "No valid notification IDs provided");
+        return sendResponse(res, 400, false, "No valid notification IDs provided. Please check the IDs and try again.");
       }
       criteria._id = { $in: validIds };
     } else {
@@ -199,25 +207,62 @@ export const deleteNotifications = async (req, res) => {
       if (priority && isValidNotificationPriority(priority)) {
         criteria.priority = priority;
       }
-      if (typeof read === 'boolean') {
+      if (read !== undefined) {
         criteria.read = read;
       }
       if (olderThan) {
-        const cutoffDate = new Date(olderThan);
-        if (!isNaN(cutoffDate.getTime())) {
-          criteria.createdAt = { $lt: cutoffDate };
+        const olderThanDate = new Date(olderThan);
+        if (isNaN(olderThanDate.getTime())) {
+          return sendResponse(res, 400, false, "Invalid date format for olderThan. Please use a valid date.");
         }
+        criteria.createdAt = { $lt: olderThanDate };
       }
     }
 
-    const result = await deleteNotificationsByCriteria(userId, criteria);
+    criteria.user = userId;
+
+    const result = await deleteNotificationsByCriteria(criteria);
 
     return sendResponse(res, 200, true, "Notifications deleted successfully", {
       deletedCount: result.deletedCount,
     });
   } catch (error) {
     console.error("🔴 [Delete Notifications Error]:", error.message);
-    return sendResponse(res, 500, false, "Failed to delete notifications");
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Something went wrong while deleting notifications. Please try again later."
+    );
+  }
+};
+
+// DELETE /api/notifications/:id - Delete a single notification
+export const deleteSingleNotification = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return sendResponse(res, 400, false, "Invalid notification ID format. Please check the URL and try again.");
+    }
+
+    const result = await Notification.deleteOne({ _id: id, user: userId });
+
+    if (result.deletedCount === 0) {
+      return sendResponse(res, 404, false, "Notification not found. It may have already been deleted.");
+    }
+
+    return sendResponse(res, 200, true, "Notification deleted successfully");
+  } catch (error) {
+    console.error("🔴 [Delete Single Notification Error]:", error.message);
+    return sendResponse(
+      res,
+      500,
+      false,
+      "Something went wrong while deleting the notification. Please try again later."
+    );
   }
 };
 

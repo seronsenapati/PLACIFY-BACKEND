@@ -30,11 +30,17 @@ export const createReview = async (req, res) => {
         ].filter(Boolean)
       });
       
+      const missingFields = [
+        !rating ? 'rating' : null,
+        !title ? 'title' : null,
+        !comment ? 'comment' : null
+      ].filter(Boolean);
+      
       return sendResponse(
         res,
         400,
         false,
-        "Rating, title, and comment are required",
+        `Please fill in all required fields: ${missingFields.join(', ')}.`,
         null,
         requestId
       );
@@ -53,7 +59,7 @@ export const createReview = async (req, res) => {
         res,
         400,
         false,
-        "Rating must be between 1 and 5",
+        "Please provide a rating between 1 and 5 stars.",
         null,
         requestId
       );
@@ -72,7 +78,7 @@ export const createReview = async (req, res) => {
         res,
         404,
         false,
-        "Company not found",
+        "Company not found. The company may have been removed.",
         null,
         requestId
       );
@@ -95,7 +101,7 @@ export const createReview = async (req, res) => {
         res,
         409,
         false,
-        "You have already reviewed this company",
+        "You have already reviewed this company. You can edit your existing review instead.",
         null,
         requestId
       );
@@ -147,7 +153,7 @@ export const createReview = async (req, res) => {
         res,
         409,
         false,
-        "You have already reviewed this company",
+        "You have already reviewed this company. You can edit your existing review instead.",
         null,
         requestId
       );
@@ -157,7 +163,7 @@ export const createReview = async (req, res) => {
       res,
       500,
       false,
-      "Server error during review creation",
+      "Something went wrong while creating your review. Please try again later.",
       null,
       requestId
     );
@@ -188,7 +194,7 @@ export const getCompanyReviews = async (req, res) => {
         res,
         404,
         false,
-        "Company not found",
+        "Company not found. The company may have been removed.",
         null,
         requestId
       );
@@ -198,35 +204,40 @@ export const getCompanyReviews = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     
-    // Get reviews with user details
-    const reviews = await Review.getReviewsWithUsers(req.params.companyId, page, limit);
+    // Calculate skip value for pagination
+    const skip = (page - 1) * limit;
     
-    // Get total count
-    const total = await Review.countDocuments({ company: req.params.companyId });
+    // Fetch reviews with user details (excluding sensitive info)
+    const reviews = await Review.find({ company: req.params.companyId })
+      .populate('user', 'name profilePhoto') // Only populate name and profile photo
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
-    const response = {
-      reviews,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    };
+    // Get total count for pagination
+    const totalReviews = await Review.countDocuments({ company: req.params.companyId });
     
     logInfo("Company reviews fetched successfully", {
       requestId,
-      userId: req.user?.id || 'anonymous',
       companyId: req.params.companyId,
-      count: reviews.length
+      totalReviews,
+      page,
+      limit
     });
     
     return sendResponse(
       res,
       200,
       true,
-      "Reviews fetched successfully",
-      response,
+      "Company reviews fetched successfully",
+      {
+        reviews,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalReviews / limit),
+          totalReviews
+        }
+      },
       requestId
     );
   } catch (error) {
@@ -240,7 +251,7 @@ export const getCompanyReviews = async (req, res) => {
       res,
       500,
       false,
-      "Server error during reviews fetch",
+      "Something went wrong while fetching company reviews. Please try again later.",
       null,
       requestId
     );
@@ -258,48 +269,39 @@ export const updateReview = async (req, res) => {
       reviewId: req.params.reviewId
     });
     
-    const review = await Review.findById(req.params.reviewId);
+    const { rating, title, comment } = req.body;
     
-    if (!review) {
-      logWarn("Review update failed - review not found", {
-        requestId,
-        userId: req.user.id,
-        reviewId: req.params.reviewId
-      });
-      
-      return sendResponse(
-        res,
-        404,
-        false,
-        "Review not found",
-        null,
-        requestId
-      );
-    }
-    
-    // Check if user owns the review
-    if (review.user.toString() !== req.user.id) {
-      logWarn("Review update failed - unauthorized", {
+    // Validate required fields
+    if (!rating || !title || !comment) {
+      logWarn("Review update failed - missing required fields", {
         requestId,
         userId: req.user.id,
         reviewId: req.params.reviewId,
-        reviewOwner: review.user
+        missingFields: [
+          !rating ? 'rating' : null,
+          !title ? 'title' : null,
+          !comment ? 'comment' : null
+        ].filter(Boolean)
       });
+      
+      const missingFields = [
+        !rating ? 'rating' : null,
+        !title ? 'title' : null,
+        !comment ? 'comment' : null
+      ].filter(Boolean);
       
       return sendResponse(
         res,
-        403,
+        400,
         false,
-        "You are not authorized to update this review",
+        `Please fill in all required fields: ${missingFields.join(', ')}.`,
         null,
         requestId
       );
     }
     
-    const { rating, title, comment } = req.body;
-    
-    // Validate rating range if provided
-    if (rating !== undefined && (rating < 1 || rating > 5)) {
+    // Validate rating range
+    if (rating < 1 || rating > 5) {
       logWarn("Review update failed - invalid rating", {
         requestId,
         userId: req.user.id,
@@ -311,33 +313,45 @@ export const updateReview = async (req, res) => {
         res,
         400,
         false,
-        "Rating must be between 1 and 5",
+        "Please provide a rating between 1 and 5 stars.",
         null,
         requestId
       );
     }
     
-    // Store old rating for activity log
-    const oldRating = review.rating;
+    // Check if review exists and belongs to user
+    const review = await Review.findOne({
+      _id: req.params.reviewId,
+      user: req.user.id
+    });
     
-    // Update review fields
-    if (rating !== undefined) review.rating = rating;
-    if (title !== undefined) review.title = title;
-    if (comment !== undefined) review.comment = comment;
+    if (!review) {
+      logWarn("Review update failed - review not found or unauthorized", {
+        requestId,
+        userId: req.user.id,
+        reviewId: req.params.reviewId
+      });
+      
+      return sendResponse(
+        res,
+        404,
+        false,
+        "Review not found or you don't have permission to update this review.",
+        null,
+        requestId
+      );
+    }
     
+    // Update review
+    review.rating = rating;
+    review.title = title;
+    review.comment = comment;
     await review.save();
     
     // Update company rating
     const company = await Company.findById(review.company);
     if (company) {
       await company.updateRating();
-      
-      // Log activity
-      await company.logActivity("review_updated", req.user.id, {
-        reviewId: review._id,
-        oldRating,
-        newRating: review.rating
-      });
     }
     
     logInfo("Review updated successfully", {
@@ -365,7 +379,7 @@ export const updateReview = async (req, res) => {
       res,
       500,
       false,
-      "Server error during review update",
+      "Something went wrong while updating your review. Please try again later.",
       null,
       requestId
     );
@@ -383,10 +397,14 @@ export const deleteReview = async (req, res) => {
       reviewId: req.params.reviewId
     });
     
-    const review = await Review.findById(req.params.reviewId);
+    // Check if review exists and belongs to user
+    const review = await Review.findOneAndDelete({
+      _id: req.params.reviewId,
+      user: req.user.id
+    });
     
     if (!review) {
-      logWarn("Review deletion failed - review not found", {
+      logWarn("Review deletion failed - review not found or unauthorized", {
         requestId,
         userId: req.user.id,
         reviewId: req.params.reviewId
@@ -396,46 +414,16 @@ export const deleteReview = async (req, res) => {
         res,
         404,
         false,
-        "Review not found",
+        "Review not found or you don't have permission to delete this review.",
         null,
         requestId
       );
     }
-    
-    // Check if user owns the review or is admin
-    if (review.user.toString() !== req.user.id && req.user.role !== 'admin') {
-      logWarn("Review deletion failed - unauthorized", {
-        requestId,
-        userId: req.user.id,
-        reviewId: req.params.reviewId,
-        reviewOwner: review.user,
-        userRole: req.user.role
-      });
-      
-      return sendResponse(
-        res,
-        403,
-        false,
-        "You are not authorized to delete this review",
-        null,
-        requestId
-      );
-    }
-    
-    const companyId = review.company;
-    const rating = review.rating;
-    
-    await Review.findByIdAndDelete(req.params.reviewId);
     
     // Update company rating
-    const company = await Company.findById(companyId);
+    const company = await Company.findById(review.company);
     if (company) {
       await company.updateRating();
-      
-      // Log activity
-      await company.logActivity("review_deleted", req.user.id, {
-        rating
-      });
     }
     
     logInfo("Review deleted successfully", {
@@ -463,7 +451,7 @@ export const deleteReview = async (req, res) => {
       res,
       500,
       false,
-      "Server error during review deletion",
+      "Something went wrong while deleting your review. Please try again later.",
       null,
       requestId
     );
@@ -471,7 +459,7 @@ export const deleteReview = async (req, res) => {
 };
 
 // POST - Vote on a review (helpful/unhelpful)
-export const voteOnReview = async (req, res) => {
+export const voteReview = async (req, res) => {
   const requestId = uuidv4();
   
   try {
@@ -482,8 +470,28 @@ export const voteOnReview = async (req, res) => {
       vote: req.body.vote
     });
     
-    const review = await Review.findById(req.params.reviewId);
+    // Validate vote value
+    const vote = req.body.vote;
+    if (vote !== 1 && vote !== -1) {
+      logWarn("Review voting failed - invalid vote value", {
+        requestId,
+        userId: req.user.id,
+        reviewId: req.params.reviewId,
+        vote
+      });
+      
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid vote value. Please use 1 for helpful or -1 for not helpful.",
+        null,
+        requestId
+      );
+    }
     
+    // Check if review exists
+    const review = await Review.findById(req.params.reviewId);
     if (!review) {
       logWarn("Review voting failed - review not found", {
         requestId,
@@ -495,38 +503,32 @@ export const voteOnReview = async (req, res) => {
         res,
         404,
         false,
-        "Review not found",
+        "Review not found. It may have been deleted.",
         null,
         requestId
       );
     }
     
-    const vote = req.body.vote;
+    // Check if user has already voted
+    const existingVoteIndex = review.userVotes.findIndex(v => v.user.toString() === req.user.id);
     
-    // Validate vote
-    if (vote !== 'helpful') {
-      logWarn("Review voting failed - invalid vote", {
-        requestId,
-        userId: req.user.id,
-        reviewId: req.params.reviewId,
+    if (existingVoteIndex > -1) {
+      // Update existing vote
+      review.userVotes[existingVoteIndex].vote = vote;
+    } else {
+      // Add new vote
+      review.userVotes.push({
+        user: req.user.id,
         vote
       });
-      
-      return sendResponse(
-        res,
-        400,
-        false,
-        "Vote must be 'helpful'",
-        null,
-        requestId
-      );
     }
     
-    // Update helpful votes
-    review.helpfulVotes += 1;
+    // Recalculate helpful votes
+    review.helpfulVotes = review.userVotes.reduce((total, vote) => total + vote.vote, 0);
+    
     await review.save();
     
-    logInfo("Review voted on successfully", {
+    logInfo("Review vote recorded successfully", {
       requestId,
       userId: req.user.id,
       reviewId: req.params.reviewId,
@@ -552,7 +554,7 @@ export const voteOnReview = async (req, res) => {
       res,
       500,
       false,
-      "Server error during review voting",
+      "Something went wrong while recording your vote. Please try again later.",
       null,
       requestId
     );
