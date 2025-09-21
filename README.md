@@ -1,4 +1,4 @@
-# Placify - Job Portal Platform
+# Placify - Your Career, Our Mission.
 
 Placify is a comprehensive job portal platform that connects students with recruiters. It provides a seamless experience for job posting, application management, and company reviews.
 
