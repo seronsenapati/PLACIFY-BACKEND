@@ -12,7 +12,6 @@ Placify is a comprehensive job portal platform that connects students with recru
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
-  - [Environment Variables](#environment-variables)
 - [API Documentation](#api-documentation)
 - [Project Structure](#project-structure)
 - [Key Components](#key-components)
@@ -123,37 +122,6 @@ npm run dev
 5. For production:
 ```bash
 npm start
-```
-
-### Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
-```env
-# Server Configuration
-PORT=3000
-NODE_ENV=development
-FRONTEND_URL=http://localhost:5173
-
-# Database Configuration
-MONGO_URI=your_mongodb_connection_string
-
-# JWT Configuration
-JWT_SECRET=your_jwt_secret_key
-JWT_EXPIRE=1d
-
-# Cloudinary Configuration
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-
-# OpenRouter API Configuration
-OPENROUTER_API_KEY=your_openrouter_api_key
-
-# Admin User Configuration
-ADMIN_NAME=Admin Name
-ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=admin_password
 ```
 
 ## API Documentation
