@@ -376,7 +376,7 @@ export const updateProfile = async (req, res) => {
         const result = await new Promise((resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
             {
-              folder: "placify_profiles",
+              folder: "placify_profile_photos",
               transformation: [
                 { width: 500, height: 500, crop: "limit" },
                 { quality: "auto" },
@@ -394,7 +394,33 @@ export const updateProfile = async (req, res) => {
         console.log("Profile photo uploaded:", result.secure_url);
       } catch (uploadError) {
         console.error("Profile photo upload error:", uploadError);
-        return sendResponse(res, 500, false, "Error uploading profile photo");
+        
+        // Handle Cloudinary upload errors
+        if (uploadError.message && uploadError.message.includes('Invalid image file')) {
+          return sendResponse(
+            res,
+            400,
+            false,
+            "Please upload a valid image file (JPEG, PNG, GIF)."
+          );
+        }
+        
+        // Handle file size errors
+        if (uploadError.message && uploadError.message.includes('File size')) {
+          return sendResponse(
+            res,
+            400,
+            false,
+            "Profile photo is too large. Please upload an image smaller than 3MB."
+          );
+        }
+        
+        return sendResponse(
+          res,
+          500,
+          false,
+          "Something went wrong while uploading your profile photo. Please try again later."
+        );
       }
     }
 
@@ -660,7 +686,7 @@ export const uploadProfilePhoto = async (req, res) => {
         res,
         400,
         false,
-        "Profile photo is too large. Please upload an image smaller than 5MB."
+        "Profile photo is too large. Please upload an image smaller than 3MB."
       );
     }
     

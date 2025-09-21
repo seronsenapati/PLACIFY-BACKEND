@@ -25,6 +25,23 @@ router.patch(
           message: err.message,
           stack: err.stack,
         });
+        
+        // Handle file size errors
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({
+            success: false,
+            message: "Profile photo is too large. Please upload an image smaller than 3MB.",
+          });
+        }
+        
+        // Handle file type errors
+        if (err.message && err.message.includes('Only image files are allowed')) {
+          return res.status(400).json({
+            success: false,
+            message: "Please upload a valid image file (JPEG, PNG, GIF).",
+          });
+        }
+        
         return res.status(400).json({
           success: false,
           message: err.message || "Error uploading profile photo",
@@ -50,6 +67,24 @@ router.patch(
           message: err.message,
           stack: err.stack,
         });
+        
+        // Handle file size errors
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({
+            success: false,
+            message: "Resume file is too large. Please upload a file smaller than 10MB.",
+          });
+        }
+        
+        // Handle file type errors
+        if (err.message && (err.message.includes('Only PDF and DOCX files are allowed') || 
+                           err.message.includes('Invalid file type'))) {
+          return res.status(400).json({
+            success: false,
+            message: "Please upload a valid resume file (PDF or DOCX).",
+          });
+        }
+        
         return res.status(400).json({
           success: false,
           message: err.message || "Error uploading resume",
