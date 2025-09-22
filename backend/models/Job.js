@@ -98,19 +98,18 @@ const jobSchema = new mongoose.Schema(
 );
 
 // Add indexes for better performance on common queries
-// Only create indexes in production or if explicitly enabled
-if (process.env.NODE_ENV === 'production' || process.env.CREATE_INDEXES === 'true') {
-  jobSchema.index({ createdBy: 1 }, { background: true });
-  jobSchema.index({ location: 1, jobType: 1 }, { background: true });
-  jobSchema.index({ skills: 1 }, { background: true });
-  jobSchema.index({ createdAt: -1 }, { background: true });
-  jobSchema.index({ expiresAt: 1, status: 1 }, { background: true });
-  // Add new indexes for enhanced search capabilities
-  jobSchema.index({ company: 1 }, { background: true });
-  jobSchema.index({ experienceLevel: 1 }, { background: true });
-  jobSchema.index({ isRemote: 1 }, { background: true });
-  jobSchema.index({ applicationDeadline: 1 }, { background: true });
-}
+// Create indexes in both development and production for consistent performance
+jobSchema.index({ createdBy: 1 });
+jobSchema.index({ location: 1, jobType: 1 });
+jobSchema.index({ skills: 1 });
+jobSchema.index({ createdAt: -1 });
+jobSchema.index({ expiresAt: 1, status: 1 });
+// Add new indexes for enhanced search capabilities
+jobSchema.index({ company: 1 });
+jobSchema.index({ experienceLevel: 1 });
+jobSchema.index({ isRemote: 1 });
+jobSchema.index({ applicationDeadline: 1 });
+jobSchema.index({ title: "text", role: "text", location: "text" }); // Text index for search
 
 // Static method to get job statistics
 jobSchema.statics.getStats = async function() {

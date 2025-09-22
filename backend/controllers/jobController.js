@@ -248,18 +248,17 @@ export const getAllJobs = async (req, res) => {
       companyId
     } = req.query;
 
+    // Build filter object
     const filter = { status };
 
+    // Text search using MongoDB text index for better performance
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { role: { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
-      ];
+      filter.$text = { $search: search };
+    } else if (location || role) {
+      // Fallback to regex search if no text index search
+      if (location) filter.location = location;
+      if (role) filter.role = role;
     }
-
-    if (location) filter.location = location;
-    if (role) filter.role = role;
 
     const validJobTypes = ["internship", "full-time", "part-time", "contract"];
     if (jobType && validJobTypes.includes(jobType)) {
@@ -306,32 +305,42 @@ export const getAllJobs = async (req, res) => {
       }
     ];
 
+    // Build sort options
     const sortOptions = {};
     if (sortBy) {
       sortOptions[sortBy] = order === "asc" ? 1 : -1;
+    } else {
+      // Default sort by relevance if search term is used, otherwise by creation date
+      sortOptions[search ? 'score' : 'createdAt'] = search ? { $meta: "textScore" } : -1;
     }
 
-    const totalJobs = await Job.countDocuments(filter);
+    // Convert page and limit to numbers
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
 
-    const jobs = await Job.find(filter)
-      .populate("createdBy", "name email")
-      .populate("company", "name logo")
-      .sort(sortOptions || { createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+    // Execute count and find queries in parallel for better performance
+    const [totalJobs, jobs] = await Promise.all([
+      Job.countDocuments(filter),
+      Job.find(filter)
+        .populate("createdBy", "name email")
+        .populate("company", "name logo")
+        .sort(sortOptions)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+    ]);
 
     logInfo('Jobs fetched successfully', {
       requestId,
       totalJobs,
-      currentPage: Number(page),
-      totalPages: Math.ceil(totalJobs / limit)
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalJobs / limitNum)
     });
 
     return sendSuccessResponse(res, "Jobs fetched successfully", {
       jobs,
       totalJobs,
-      totalPages: Math.ceil(totalJobs / limit),
-      currentPage: Number(page),
+      totalPages: Math.ceil(totalJobs / limitNum),
+      currentPage: pageNum,
     }, 200, requestId);
   } catch (error) {
     logError("Get all jobs error", error, {
@@ -867,16 +876,14 @@ export const getRecruiterJobs = async (req, res) => {
       filter.status = status;
     }
 
+    // Text search using MongoDB text index for better performance
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { role: { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
-      ];
+      filter.$text = { $search: search };
+    } else if (location || role) {
+      // Fallback to regex search if no text index search
+      if (location) filter.location = location;
+      if (role) filter.role = role;
     }
-
-    if (location) filter.location = location;
-    if (role) filter.role = role;
 
     const validJobTypes = ["internship", "full-time", "part-time", "contract"];
     if (jobType && validJobTypes.includes(jobType)) {
@@ -900,33 +907,43 @@ export const getRecruiterJobs = async (req, res) => {
       filter.isRemote = isRemote === 'true';
     }
 
+    // Build sort options
     const sortOptions = {};
     if (sortBy) {
       sortOptions[sortBy] = order === "asc" ? 1 : -1;
+    } else {
+      // Default sort by relevance if search term is used, otherwise by creation date
+      sortOptions[search ? 'score' : 'createdAt'] = search ? { $meta: "textScore" } : -1;
     }
 
-    const totalJobs = await Job.countDocuments(filter);
+    // Convert page and limit to numbers
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
 
-    const jobs = await Job.find(filter)
-      .populate("createdBy", "name email")
-      .populate("company", "name logo")
-      .sort(sortOptions || { createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+    // Execute count and find queries in parallel for better performance
+    const [totalJobs, jobs] = await Promise.all([
+      Job.countDocuments(filter),
+      Job.find(filter)
+        .populate("createdBy", "name email")
+        .populate("company", "name logo")
+        .sort(sortOptions)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+    ]);
 
     logInfo('Recruiter jobs fetched successfully', {
       requestId,
       userId: req.user.id,
       totalJobs,
-      currentPage: Number(page),
-      totalPages: Math.ceil(totalJobs / limit)
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalJobs / limitNum)
     });
 
     return sendSuccessResponse(res, "Jobs fetched successfully", {
       jobs,
       totalJobs,
-      totalPages: Math.ceil(totalJobs / limit),
-      currentPage: Number(page),
+      totalPages: Math.ceil(totalJobs / limitNum),
+      currentPage: pageNum,
     }, 200, requestId);
   } catch (error) {
     logError("Get recruiter jobs error", error, {

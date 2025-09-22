@@ -63,6 +63,15 @@ app.get("/", (req, res) => {
   res.send("Welcome to Placify API");
 });
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
@@ -96,7 +105,8 @@ const startServer = async () => {
     console.log("MongoDB connected successfully");
     
     // Import and start cron jobs only in production or if explicitly enabled
-    if (process.env.NODE_ENV === 'production' || process.env.ENABLE_CRON === 'true') {
+    // Only start cron jobs if ENABLE_CRON is explicitly set to true
+    if (process.env.ENABLE_CRON === 'true') {
       console.log("Starting cron jobs...");
       
       // Import cron jobs dynamically
@@ -109,7 +119,7 @@ const startServer = async () => {
       startRecruiterNotificationCron();
       scheduleJobExpirationChecker();
     } else {
-      console.log("⏭️  Cron jobs skipped (not in production and not explicitly enabled)");
+      console.log("⏭️  Cron jobs skipped (ENABLE_CRON not set to true)");
     }
     
     server = app.listen(PORT, () => {
